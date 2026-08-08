@@ -1,66 +1,181 @@
-import { useState, useEffect } from 'react';
+import { useRef } from 'react';
 import { useExtend } from '@pixi/react';
+import { useShallow } from 'zustand/react/shallow';
 import '@pixi/layout';
 import { LayoutContainer } from '@pixi/layout/components';
-import { Assets, Sprite } from 'pixi.js';
+import * as pixiJs from 'pixi.js';
+import { Assets, Sprite, Text } from 'pixi.js';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+import { PixiPlugin } from 'gsap/PixiPlugin';
+import 'pixi.js/advanced-blend-modes';
 
-/** @type {[string, string[]][]} */
-const bundleDefinitionCollection = [
-  ['load-screen', ['flowerTop']],
-  ['game-screen', ['eggHead']]
-];
+import useStore from '#/component/useStore';
 
-Assets.init({
-  manifest: {
-    bundles: bundleDefinitionCollection.map(([name, aliasCollection]) => ({
-      name,
-      assets: aliasCollection.map((alias) => ({
-        alias,
-        src: `/asset/image/${alias}.png`
-      }))
+gsap.registerPlugin(useGSAP, PixiPlugin);
+PixiPlugin.registerPIXI(pixiJs);
+
+const blendModeCollection = /** @type {pixiJs.BLEND_MODES[]} */ ([
+  'normal',
+  'add',
+  'screen',
+  'darken',
+  'lighten',
+  'color-dodge',
+  'color-burn',
+  'linear-burn',
+  'linear-dodge',
+  'linear-light',
+  'hard-light',
+  'soft-light',
+  'pin-light',
+  'difference',
+  'exclusion',
+  'overlay',
+  'saturation',
+  'color',
+  'luminosity',
+  'add-npm',
+  'subtract',
+  'divide',
+  'vivid-light',
+  'hard-mix',
+  'negation'
+]);
+
+const textureCollection = await (async () => {
+  const assetAliasCollection = ['panda', 'rainbow-gradient'];
+
+  return await Assets.load(
+    assetAliasCollection.map((alias) => ({
+      alias,
+      src: `/asset/image/${alias}.png`
     }))
-  }
+  ).then((assetObject) =>
+    assetAliasCollection.map((alias) => assetObject[alias])
+  );
+})();
+
+await Assets.load({
+  label: 'ShortStack',
+  src: '/asset/font/ShortStack-Regular.ttf',
+  data: { family: 'ShortStack' }
 });
 
-Assets.backgroundLoadBundle(bundleDefinitionCollection.map(([name]) => name));
+const Container__ = ({ index, dimension }) => {
+  const blendMode = blendModeCollection[index];
 
-const Sprite_ = () => {
-  useExtend({ LayoutContainer, Sprite });
+  useExtend({ LayoutContainer, Sprite, Text });
 
-  const [
-    bundleDefinitionCollectionIndexActive,
-    bundleDefinitionCollectionIndexActiveSet
-  ] = useState(0);
+  const { scaleFactor } = useStore(
+    useShallow(({ displayDefinition: { scaleFactor } }) => ({ scaleFactor }))
+  );
 
-  const [texture, textureSet] = useState(undefined);
+  const ref = useRef(undefined);
 
-  useEffect(() => {
-    const [name, aliasCollection] =
-      bundleDefinitionCollection[bundleDefinitionCollectionIndexActive];
+  useGSAP(
+    () => {
+      gsap.to(
+        /** @type {pixiJs.Container} */ (ref.current).getChildByLabel(
+          'Sprite_'
+        ),
+        {
+          pixi: { angle: 360 },
+          repeat: -1,
+          ease: 'none',
+          duration: 5
+        }
+      );
+    },
+    { dependencies: [] }
+  );
 
-    Assets.loadBundle(name)
-      .then((assetObject) => aliasCollection.map((alias) => assetObject[alias]))
-      .then(([texture]) => textureSet(texture));
-  }, [bundleDefinitionCollectionIndexActive]);
+  return (
+    <pixiLayoutContainer
+      ref={ref}
+      layout={{
+        position: 'relative',
+        width: dimension,
+        height: dimension,
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        borderWidth: 1,
+        borderColor: 0x000000,
+        backgroundColor: 0xffffff
+      }}
+    >
+      <pixiSprite
+        label='Sprite_'
+        texture={textureCollection[0]}
+        layout={{
+          width: dimension * 0.6,
+          objectFit: 'contain'
+        }}
+      />
+
+      <pixiSprite
+        texture={textureCollection[1]}
+        layout={{ position: 'absolute', width: '100%', height: '100%' }}
+        blendMode={blendMode}
+      />
+
+      <pixiLayoutContainer
+        layout={{
+          justifyContent: 'center',
+          alignItems: 'center',
+          marginBottom: 5,
+          padding: 10,
+          borderWidth: 1,
+          borderColor: 0x000000,
+          borderRadius: 4
+        }}
+      >
+        <pixiText
+          text={blendMode}
+          layout={{}}
+          style={{
+            fontFamily: 'ShortStack',
+            fontSize: 12 * scaleFactor,
+            fontWeight: 'bolder'
+          }}
+        />
+      </pixiLayoutContainer>
+    </pixiLayoutContainer>
+  );
+};
+
+const Container_ = () => {
+  useExtend({ LayoutContainer });
+
+  const { dimension } = useStore(
+    useShallow(
+      ({
+        displayDefinition: {
+          widthMinimum,
+          dimension: { width }
+        }
+      }) => ({ dimension: Math.min(width, widthMinimum) })
+    )
+  );
 
   return (
     <pixiLayoutContainer
       layout={{
-        padding: 20,
-        borderWidth: 1,
-        borderColor: '#ffffff22',
-        borderRadius: 8
+        width: dimension,
+        height: dimension,
+        flexWrap: 'wrap',
+        borderWidth: 0,
+        borderColor: 0x00ff00
       }}
-      eventMode='static'
-      cursor='pointer'
-      onPointerTap={() =>
-        bundleDefinitionCollectionIndexActiveSet(
-          (bundleDefinitionCollectionIndexActive) =>
-            Number(!bundleDefinitionCollectionIndexActive)
-        )
-      }
     >
-      <pixiSprite texture={texture} layout={{}} />
+      {Array.from({ length: 25 }).map((_, index, collection) => (
+        <Container__
+          key={index}
+          index={index}
+          dimension={Math.floor(dimension / collection.length ** 0.5)}
+        />
+      ))}
     </pixiLayoutContainer>
   );
 };
@@ -74,11 +189,11 @@ const Home = () => {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1,
+        borderWidth: 0,
         borderColor: 0xff0000
       }}
     >
-      <Sprite_ />
+      <Container_ />
     </pixiLayoutContainer>
   );
 };
