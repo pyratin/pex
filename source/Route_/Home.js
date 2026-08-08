@@ -1,54 +1,51 @@
-import { useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useExtend } from '@pixi/react';
 import '@pixi/layout';
 import { LayoutContainer } from '@pixi/layout/components';
-import * as pixiJs from 'pixi.js';
-import { Assets, AnimatedSprite } from 'pixi.js';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import { PixiPlugin } from 'gsap/PixiPlugin';
+import { Assets, Sprite } from 'pixi.js';
 
-gsap.registerPlugin(useGSAP, PixiPlugin);
-PixiPlugin.registerPIXI(pixiJs);
+const assetAliasCollection = ['flowerTop', 'eggHead'];
 
-const textureCollection = await Assets.load('/asset/sprite/fighter.json').then(
-  ({ textures }) => Object.values(textures)
+Assets.add(
+  assetAliasCollection.map((alias) => ({
+    alias,
+    src: `/asset/image/${alias}.png`
+  }))
 );
 
-const AnimatedSprite_ = () => {
-  useExtend({ LayoutContainer, AnimatedSprite });
+Assets.backgroundLoad(assetAliasCollection);
 
-  const ref = useRef(undefined);
+const Sprite_ = () => {
+  useExtend({ LayoutContainer, Sprite });
+
+  const [assetAliasCollectionIndexActive, assetAliasCollectionIndexActiveSet] =
+    useState(0);
+
+  const [texture, textureSet] = useState(undefined);
 
   useEffect(() => {
-    /** @type {pixiJs.AnimatedSprite} */ (
-      /** @type {pixiJs.Container} */ (ref.current).getChildAt(0)
-    ).play();
-  }, []);
-
-  useGSAP(
-    () => {
-      gsap.to(ref.current, {
-        pixi: { angle: 360 },
-        repeat: -1,
-        ease: 'none',
-        duration: 5
-      });
-    },
-    { dependencies: [] }
-  );
+    Assets.load(assetAliasCollection[assetAliasCollectionIndexActive]).then(
+      textureSet
+    );
+  }, [assetAliasCollectionIndexActive]);
 
   return (
     <pixiLayoutContainer
-      ref={ref}
       layout={{
         padding: 20,
         borderWidth: 1,
         borderColor: '#ffffff22',
         borderRadius: 8
       }}
+      eventMode='static'
+      cursor='pointer'
+      onPointerTap={() =>
+        assetAliasCollectionIndexActiveSet((assetAliasCollectionIndexActive) =>
+          Number(!assetAliasCollectionIndexActive)
+        )
+      }
     >
-      <pixiAnimatedSprite textures={textureCollection} layout={{}} />
+      <pixiSprite texture={texture} layout={{}} />
     </pixiLayoutContainer>
   );
 };
@@ -63,10 +60,10 @@ const Home = () => {
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: 0xff0000
+        borderColor: '#ffffff22'
       }}
     >
-      <AnimatedSprite_ />
+      <Sprite_ />
     </pixiLayoutContainer>
   );
 };
