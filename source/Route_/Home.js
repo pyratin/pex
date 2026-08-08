@@ -4,30 +4,44 @@ import '@pixi/layout';
 import { LayoutContainer } from '@pixi/layout/components';
 import { Assets, Sprite } from 'pixi.js';
 
-const assetAliasCollection = ['flowerTop', 'eggHead'];
+/** @type {[string, string[]][]} */
+const bundleDefinitionCollection = [
+  ['load-screen', ['flowerTop']],
+  ['game-screen', ['eggHead']]
+];
 
-Assets.add(
-  assetAliasCollection.map((alias) => ({
-    alias,
-    src: `/asset/image/${alias}.png`
-  }))
-);
+Assets.init({
+  manifest: {
+    bundles: bundleDefinitionCollection.map(([name, aliasCollection]) => ({
+      name,
+      assets: aliasCollection.map((alias) => ({
+        alias,
+        src: `/asset/image/${alias}.png`
+      }))
+    }))
+  }
+});
 
-Assets.backgroundLoad(assetAliasCollection);
+Assets.backgroundLoadBundle(bundleDefinitionCollection.map(([name]) => name));
 
 const Sprite_ = () => {
   useExtend({ LayoutContainer, Sprite });
 
-  const [assetAliasCollectionIndexActive, assetAliasCollectionIndexActiveSet] =
-    useState(0);
+  const [
+    bundleDefinitionCollectionIndexActive,
+    bundleDefinitionCollectionIndexActiveSet
+  ] = useState(0);
 
   const [texture, textureSet] = useState(undefined);
 
   useEffect(() => {
-    Assets.load(assetAliasCollection[assetAliasCollectionIndexActive]).then(
-      textureSet
-    );
-  }, [assetAliasCollectionIndexActive]);
+    const [name, aliasCollection] =
+      bundleDefinitionCollection[bundleDefinitionCollectionIndexActive];
+
+    Assets.loadBundle(name)
+      .then((assetObject) => aliasCollection.map((alias) => assetObject[alias]))
+      .then(([texture]) => textureSet(texture));
+  }, [bundleDefinitionCollectionIndexActive]);
 
   return (
     <pixiLayoutContainer
@@ -40,8 +54,9 @@ const Sprite_ = () => {
       eventMode='static'
       cursor='pointer'
       onPointerTap={() =>
-        assetAliasCollectionIndexActiveSet((assetAliasCollectionIndexActive) =>
-          Number(!assetAliasCollectionIndexActive)
+        bundleDefinitionCollectionIndexActiveSet(
+          (bundleDefinitionCollectionIndexActive) =>
+            Number(!bundleDefinitionCollectionIndexActive)
         )
       }
     >
@@ -60,7 +75,7 @@ const Home = () => {
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#ffffff22'
+        borderColor: 0xff0000
       }}
     >
       <Sprite_ />
