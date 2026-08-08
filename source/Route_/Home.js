@@ -1,74 +1,54 @@
 import { useRef, useEffect } from 'react';
 import { useExtend } from '@pixi/react';
-import { useShallow } from 'zustand/react/shallow';
 import '@pixi/layout';
 import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
 import { Assets, AnimatedSprite } from 'pixi.js';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+import { PixiPlugin } from 'gsap/PixiPlugin';
 
-import useStore from '#/component/useStore';
+gsap.registerPlugin(useGSAP, PixiPlugin);
+PixiPlugin.registerPIXI(pixiJs);
 
-const textureCollection = await Assets.load('/asset/sprite/mc.json').then(
+const textureCollection = await Assets.load('/asset/sprite/fighter.json').then(
   ({ textures }) => Object.values(textures)
 );
 
 const AnimatedSprite_ = () => {
   useExtend({ LayoutContainer, AnimatedSprite });
 
-  const { dimension } = useStore(
-    useShallow(({ displayDefinition: { dimension } }) => ({ dimension }))
-  );
-
   const ref = useRef(undefined);
 
   useEffect(() => {
     /** @type {pixiJs.AnimatedSprite} */ (
       /** @type {pixiJs.Container} */ (ref.current).getChildAt(0)
-    ).gotoAndPlay(Math.floor(Math.random() * textureCollection.length));
+    ).play();
   }, []);
+
+  useGSAP(
+    () => {
+      gsap.to(ref.current, {
+        pixi: { angle: 360 },
+        repeat: -1,
+        ease: 'none',
+        duration: 5
+      });
+    },
+    { dependencies: [] }
+  );
 
   return (
     <pixiLayoutContainer
       ref={ref}
       layout={{
-        position: 'absolute',
-        borderWidth: 0,
-        borderColor: '#ffffff22'
+        padding: 20,
+        borderWidth: 1,
+        borderColor: '#ffffff22',
+        borderRadius: 8
       }}
-      position={(() => {
-        const { width, height } = dimension;
-
-        const [{ width: _width, height: _height }] =
-          /** @type {pixiJs.Texture[]} */ (textureCollection);
-
-        return {
-          x: Math.random() * width - _width / 2,
-          y: Math.random() * height - _height / 2
-        };
-      })()}
     >
-      <pixiAnimatedSprite
-        textures={textureCollection}
-        layout={{
-          ...(() => {
-            const [{ width, height }] = /** @type {pixiJs.Texture[]} */ (
-              textureCollection
-            );
-
-            const random = Math.random();
-
-            return Object.entries({ width, height }).reduce(
-              (memo, [key, value]) => ({
-                ...memo,
-                [key]: random * 0.5 * value + value
-              }),
-              {}
-            );
-          })()
-        }}
-        angle={(() => Math.random() * 360)()}
-        animationSpeed={0.5}
-      />
+      <pixiAnimatedSprite textures={textureCollection} layout={{}} />
     </pixiLayoutContainer>
   );
 };
@@ -79,15 +59,14 @@ const Home = () => {
   return (
     <pixiLayoutContainer
       layout={{
-        position: 'relative',
         flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#ffffff22'
+        borderColor: 0xff0000
       }}
     >
-      {Array.from({ length: 50 }).map((_, index) => (
-        <AnimatedSprite_ key={index} />
-      ))}
+      <AnimatedSprite_ />
     </pixiLayoutContainer>
   );
 };
