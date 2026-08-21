@@ -1,83 +1,48 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { useExtend } from '@pixi/react';
-import { useShallow } from 'zustand/react/shallow';
 import '@pixi/layout';
 import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
-import { Assets, Texture, Sprite } from 'pixi.js';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import { PixiPlugin } from 'gsap/PixiPlugin';
+import { Graphics } from 'pixi.js';
 
-import useStore from '#/component/useStore';
+const LayoutContainer_ = () => {
+  const dimension = 200;
 
-gsap.registerPlugin(useGSAP, PixiPlugin);
-PixiPlugin.registerPIXI(pixiJs);
-
-const Sprite_ = ({ index }) => {
-  useExtend({ LayoutContainer, Sprite });
-
-  const { displayDefinitionDimension } = useStore(
-    useShallow(({ displayDefinition: { dimension } }) => ({
-      displayDefinitionDimension: dimension
-    }))
-  );
+  useExtend({ LayoutContainer, Graphics });
 
   const ref = useRef(undefined);
 
-  const [texture, textureSet] = useState(Texture.EMPTY);
-
   useEffect(() => {
-    Assets.load('/asset/sprite/monsters.json').then(({ textures }) => {
-      const textureCollection = Object.values(textures);
+    const refCurrent = /** @type {pixiJs.Container} */ (ref.current);
 
-      textureSet(textureCollection[index % textureCollection.length]);
+    refCurrent.getChildAt(0).setMask({
+      mask: refCurrent.getChildAt(1),
+      inverse: true
     });
-  }, [index]);
-
-  useGSAP(
-    () => {
-      gsap.to(ref.current, {
-        pixi: { angle: 360 },
-        repeat: -1,
-        ease: 'none',
-        duration: 2
-      });
-    },
-    { dependencies: [] }
-  );
+  }, []);
 
   return (
     <pixiLayoutContainer
       ref={ref}
       layout={{
-        position: 'absolute',
-        borderWidth: 0,
+        width: dimension,
+        height: dimension,
+        borderWidth: 1,
         borderColor: 0x00ff00
       }}
-      position={(() => {
-        const { width, height } = displayDefinitionDimension;
-
-        const { width: _width, height: _height } = texture;
-
-        return /** @type {{ x: number; y: number }} */ (
-          Object.entries({
-            x: width - _width,
-            y: height - _height
-          }).reduce(
-            (memo, [key, value]) => ({
-              ...memo,
-              [key]: Math.random() * value
-            }),
-            {}
-          )
-        );
-      })()}
     >
-      <pixiSprite
-        texture={texture}
-        layout={{}}
-        tint={(() => Math.random() * 0xffffff)()}
+      <pixiGraphics
+        draw={(graphics) =>
+          graphics.rect(0, 0, dimension, dimension).fill({ color: 0x00ff00 })
+        }
+      />
+
+      <pixiGraphics
+        draw={(graphics) =>
+          graphics
+            .star(dimension / 2, dimension / 2, 5, dimension / 2)
+            .fill({ color: 0x0000ff })
+        }
       />
     </pixiLayoutContainer>
   );
@@ -86,52 +51,17 @@ const Sprite_ = ({ index }) => {
 const Home = () => {
   useExtend({ LayoutContainer });
 
-  const ref = useRef(undefined);
-
-  useGSAP(
-    () => {
-      /** @type {(_: number, __: number, frame: number) => void} */
-      const fn = (_, __, frame) =>
-        Object.assign(
-          ref.current,
-          /** @type {pixiJs.ContainerOptions} */ ({
-            scale: Math.sin(frame * 0.01),
-            angle: frame
-          })
-        );
-
-      gsap.ticker.add(fn);
-
-      return () => gsap.ticker.remove(fn);
-    },
-    { dependencies: [] }
-  );
-
   return (
     <pixiLayoutContainer
-      ref={ref}
       layout={{
-        position: 'relative',
         flex: 1,
-        borderWidth: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
         borderColor: 0xff0000
       }}
-      eventMode='static'
-      cursor='pointer'
-      onPointerTap={
-        /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
-        (event) => {
-          event.stopPropagation();
-
-          const { currentTarget } = event;
-
-          currentTarget.cacheAsTexture(!currentTarget.isCachedAsTexture);
-        }
-      }
     >
-      {Array.from({ length: 100 }).map((_, index) => (
-        <Sprite_ key={index} index={index} />
-      ))}
+      <LayoutContainer_ />
     </pixiLayoutContainer>
   );
 };
