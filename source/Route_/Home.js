@@ -4,32 +4,48 @@ import '@pixi/layout';
 import { LayoutContainer } from '@pixi/layout/components';
 import { Assets, Texture, Sprite } from 'pixi.js';
 
-const assetAliasCollection = ['flowerTop', 'eggHead'];
+/** @type {[string, string[]][]} */
+const bundleDefinitionCollection = [
+  ['load-screen', ['flowerTop']],
+  ['game-screen', ['eggHead']]
+];
 
 const Sprite_ = () => {
   useExtend({ LayoutContainer, Sprite });
 
-  const [assetAliasCollectionIndexActive, assetAliasCollectionIndexActiveSet] =
-    useState(0);
+  const [
+    bundleDefinitionCollectionIndexActive,
+    bundleDefinitionCollectionIndexActiveSet
+  ] = useState(0);
 
   const [texture, textureSet] = useState(Texture.EMPTY);
 
   useEffect(() => {
-    Assets.add(
-      assetAliasCollection.map((alias) => ({
-        alias,
-        src: `/asset/image/${alias}.png`
-      }))
-    );
-
-    Assets.backgroundLoad(assetAliasCollection);
+    Assets.init({
+      manifest: {
+        bundles: bundleDefinitionCollection.map(
+          ([name, assetAliasCollection]) => ({
+            name,
+            assets: assetAliasCollection.map((alias) => ({
+              alias,
+              src: `/asset/image/${alias}.png`
+            }))
+          })
+        )
+      }
+    });
   }, []);
 
   useEffect(() => {
-    Assets.load(assetAliasCollection[assetAliasCollectionIndexActive]).then(
-      textureSet
-    );
-  }, [assetAliasCollectionIndexActive]);
+    const [name, assetAliasCollection] =
+      bundleDefinitionCollection[bundleDefinitionCollectionIndexActive];
+
+    Assets.loadBundle(name)
+      .then((assetObject) =>
+        assetAliasCollection.map((alias) => assetObject[alias])
+      )
+      .then(([texture]) => textureSet(texture));
+  }, [bundleDefinitionCollectionIndexActive]);
 
   return (
     <pixiLayoutContainer
@@ -42,8 +58,9 @@ const Sprite_ = () => {
       eventMode='static'
       cursor='pointer'
       onPointerTap={() =>
-        assetAliasCollectionIndexActiveSet((assetAliasCollectionIndexActive) =>
-          Number(!assetAliasCollectionIndexActive)
+        bundleDefinitionCollectionIndexActiveSet(
+          (bundleDefinitionCollectionIndexActive) =>
+            Number(!bundleDefinitionCollectionIndexActive)
         )
       }
     >
@@ -61,7 +78,7 @@ const Home = () => {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 0,
+        borderWidth: 1,
         borderColor: 0xff0000
       }}
     >
