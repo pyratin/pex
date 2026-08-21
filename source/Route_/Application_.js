@@ -1,0 +1,69 @@
+import { useEffect } from 'react';
+import { Application, useExtend, useApplication } from '@pixi/react';
+import { useShallow } from 'zustand/react/shallow';
+import * as pixiLayout from '@pixi/layout';
+import { LayoutContainer } from '@pixi/layout/components';
+import * as pixiJs from 'pixi.js';
+
+import useStore from '#/component/useStore';
+
+const Application__ = ({ displayDefinitionDimension, children }) => {
+  useExtend({ LayoutContainer });
+
+  const {
+    app: { stage }
+  } = useApplication();
+
+  useEffect(() => {
+    Object.assign(
+      stage,
+      /** @type {pixiJs.ContainerOptions} */ ({
+        layout: /** @type {pixiLayout.LayoutOptions} */ (
+          displayDefinitionDimension
+        )
+      })
+    );
+  }, [displayDefinitionDimension, stage]);
+
+  return (
+    <pixiLayoutContainer
+      layout={{
+        flex: 1,
+        borderWidth: 0,
+        borderColor: 0xff0000
+      }}
+    >
+      {children}
+    </pixiLayoutContainer>
+  );
+};
+
+const Application_ = ({ children }) => {
+  const { displayDefinitionDimension } = useStore(
+    useShallow(({ displayDefinition: { dimension } }) => ({
+      displayDefinitionDimension: dimension
+    }))
+  );
+
+  return (
+    <Application
+      resizeTo={window}
+      onInit={({ stage }) =>
+        Object.assign(
+          stage,
+          /** @type {pixiJs.ContainerOptions} */ ({
+            layout: /** @type {pixiLayout.LayoutOptions} */ (
+              displayDefinitionDimension
+            )
+          })
+        )
+      }
+    >
+      <Application__ displayDefinitionDimension={displayDefinitionDimension}>
+        {children}
+      </Application__>
+    </Application>
+  );
+};
+
+export default Application_;
