@@ -48,6 +48,8 @@ const Application_ = ({ children }) => {
   return (
     <Application
       resizeTo={window}
+      useBackBuffer
+      antialias
       onInit={({ stage }) =>
         Object.assign(
           stage,
