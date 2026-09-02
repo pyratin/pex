@@ -1,68 +1,84 @@
 import { useRef, useState, useEffect } from 'react';
 import { useExtend } from '@pixi/react';
+import { useShallow } from 'zustand/react/shallow';
 import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
 import { Assets, Texture, AnimatedSprite } from 'pixi.js';
 
-const LayoutContainer_ = ({ index }) => {
+import useStore from '#/component/useStore';
+
+const LayoutContainer_ = () => {
   useExtend({ LayoutContainer, AnimatedSprite });
+
+  const { displayDimension } = useStore(
+    useShallow(({ displayDefinition: { dimension } }) => ({
+      displayDimension: dimension
+    }))
+  );
 
   const ref = useRef(undefined);
 
-  const [textureCollection, textureCollectionSet] = useState([
-    { texture: Texture.EMPTY, time: 0 }
-  ]);
+  const [textureCollection, textureCollectionSet] = useState([Texture.EMPTY]);
 
   useEffect(() => {
-    Assets.load('/asset/sprite/0123456789.json').then(
-      ({ textures, data: { frames } }) =>
-        textureCollectionSet(
-          Object.entries(textures).map(([key, texture]) => ({
-            texture,
-            time: frames[key].duration
-          }))
-        )
+    Assets.load('/asset/sprite/mc.json').then(({ textures }) =>
+      textureCollectionSet(Object.values(textures))
     );
   }, []);
 
   useEffect(() => {
-    textureCollection[0].texture !== Texture.EMPTY &&
+    textureCollection[0] !== Texture.EMPTY &&
       /** @type {pixiJs.AnimatedSprite} */ (
         /** @type {pixiJs.Container} */ (ref.current).getChildAt(0)
-      ).play();
+      ).gotoAndPlay(Math.floor(Math.random() * textureCollection.length));
   }, [textureCollection]);
 
   return (
     <pixiLayoutContainer
       ref={ref}
       layout={{
-        borderWidth: 1,
-        borderColor: '#ffffff22',
-        borderRadius: 8
+        position: 'absolute',
+        borderWidth: 0,
+        borderColor: 0x00ff00
       }}
+      position={(() => {
+        const { width, height } = displayDimension;
+
+        const [{ width: _width, height: _height }] =
+          /** @type {pixiJs.Texture[]} */ (textureCollection);
+
+        return /** @type {{ x: number; y: number }} */ (
+          Object.entries({ x: width, y: height }).reduce(
+            (memo, [key, value], index) => ({
+              ...memo,
+              [key]: Math.random() * value - (!index ? _width : _height) / 2
+            }),
+            {}
+          )
+        );
+      })()}
+      angle={(() => Math.random() * 360)()}
     >
       <pixiAnimatedSprite
         textures={textureCollection}
         layout={{
           ...(() => {
-            const [
-              {
-                texture: { width, height }
-              }
-            ] = /** @type {{ texture: pixiJs.Texture }[]} */ (
+            const [{ width, height }] = /** @type {pixiJs.Texture[]} */ (
               textureCollection
             );
+
+            const random = Math.random();
 
             return Object.entries({ width, height }).reduce(
               (memo, [key, value]) => ({
                 ...memo,
-                [key]: value * 3
+                [key]: random * 0.5 * value + value
               }),
               {}
             );
           })()
         }}
-        animationSpeed={!index ? 0.5 : 1}
+        animationSpeed={0.5}
       />
     </pixiLayoutContainer>
   );
@@ -74,16 +90,14 @@ const Home = () => {
   return (
     <pixiLayoutContainer
       layout={{
+        position: 'relative',
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 20,
         borderWidth: 0,
         borderColor: 0xff0000
       }}
     >
-      {Array.from({ length: 2 }).map((_, index) => (
-        <LayoutContainer_ key={index} index={index} />
+      {Array.from({ length: 50 }).map((_, index) => (
+        <LayoutContainer_ key={index} />
       ))}
     </pixiLayoutContainer>
   );
