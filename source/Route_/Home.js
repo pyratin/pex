@@ -3,29 +3,50 @@ import { useExtend } from '@pixi/react';
 import { LayoutContainer } from '@pixi/layout/components';
 import { Assets, Texture, Sprite } from 'pixi.js';
 
-const assetAliasCollection = ['flowerTop', 'eggHead'];
+/** @type {[string, string[]][]} */
+const bundleDefinitionCollection = [
+  ['load-screen', ['flowerTop']],
+  ['game-screen', ['eggHead']]
+];
 
 const LayoutContainer_ = () => {
   useExtend({ LayoutContainer, Sprite });
 
-  const [assetAliasIndexActive, assetAliasIndexActiveSet] = useState(0);
+  const [bundleDefinitionIndexActive, bundleDefinitionIndexActiveSet] =
+    useState(0);
 
   const [texture, textureSet] = useState(Texture.EMPTY);
 
   useEffect(() => {
-    Assets.add(
-      assetAliasCollection.map((alias) => ({
-        alias,
-        src: `/asset/image/${alias}.png`
-      }))
-    );
+    Assets.init({
+      manifest: {
+        bundles: bundleDefinitionCollection.map(
+          ([name, assetAliasCollection]) => ({
+            name,
+            assets: assetAliasCollection.map((alias) => ({
+              alias,
+              src: `/asset/image/${alias}.png`
+            }))
+          })
+        )
+      }
+    });
 
-    Assets.backgroundLoad(assetAliasCollection);
+    Assets.backgroundLoadBundle(
+      bundleDefinitionCollection.map(([name]) => name)
+    );
   }, []);
 
   useEffect(() => {
-    Assets.load(assetAliasCollection[assetAliasIndexActive]).then(textureSet);
-  }, [assetAliasIndexActive]);
+    const [name, assetAliasCollection] =
+      bundleDefinitionCollection[bundleDefinitionIndexActive];
+
+    Assets.loadBundle(name)
+      .then((assetObject) =>
+        assetAliasCollection.map((alias) => assetObject[alias])
+      )
+      .then(([texture]) => textureSet(texture));
+  }, [bundleDefinitionIndexActive]);
 
   return (
     <pixiLayoutContainer
@@ -38,8 +59,8 @@ const LayoutContainer_ = () => {
       eventMode='static'
       cursor='pointer'
       onPointerTap={() =>
-        assetAliasIndexActiveSet((assetAliasIndexActive) =>
-          Number(!assetAliasIndexActive)
+        bundleDefinitionIndexActiveSet((bundleDefinitionIndexActive) =>
+          Number(!bundleDefinitionIndexActive)
         )
       }
     >
