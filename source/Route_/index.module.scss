@@ -1,0 +1,15 @@
+:local(.Control) {
+  padding: 10px;
+  background-color: black;
+  color: white;
+
+  > div {
+    > div {
+      display: flex;
+
+      label {
+        margin-right: 5px;
+      }
+    }
+  }
+}
