@@ -1,33 +1,11 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, memo } from 'react';
 import { useExtend, useApplication } from '@pixi/react';
-import { useShallow } from 'zustand/react/shallow';
 import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
-import { Assets, Texture, Sprite } from 'pixi.js';
+import { Assets, Texture, Graphics, Sprite } from 'pixi.js';
 
-import useStore from '#/component/useStore';
-
-const dragDefinitionInitialized = {
-  pointerId: undefined,
-  offset: { x: undefined, y: undefined }
-};
-
-const LayoutContainer_ = () => {
-  useExtend({ LayoutContainer, Sprite });
-
-  const {
-    app: { stage, screen }
-  } = useApplication();
-
-  const { displayDimension } = useStore(
-    useShallow(({ displayDefinition: { dimension } }) => ({
-      displayDimension: dimension
-    }))
-  );
-
-  const ref = useRef(undefined);
-
-  const dragDefinitionRef = useRef(dragDefinitionInitialized);
+const Sprite_ = ({ scaleFactor }) => {
+  useExtend({ Sprite });
 
   const [texture, textureSet] = useState(Texture.EMPTY);
 
@@ -47,6 +25,43 @@ const LayoutContainer_ = () => {
     });
   }, []);
 
+  return (
+    <pixiSprite
+      texture={texture}
+      layout={{
+        ...(() => {
+          const { width, height } = texture;
+
+          return Object.entries({ width, height }).reduce(
+            (memo, [key, value]) => ({
+              ...memo,
+              [key]: value + value * (scaleFactor + 1)
+            }),
+            {}
+          );
+        })()
+      }}
+    />
+  );
+};
+
+const dimension = (() => {
+  const height = 24;
+
+  return { width: height * 20, height };
+})();
+
+const Control_ = ({ scaleFactorSet }) => {
+  useExtend({ LayoutContainer, Graphics });
+
+  const {
+    app: { stage, screen }
+  } = useApplication();
+
+  const ref = useRef(undefined);
+
+  const pointerIdRef = useRef(undefined);
+
   useEffect(() => {
     Object.assign(
       stage,
@@ -59,23 +74,31 @@ const LayoutContainer_ = () => {
 
   /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
   const onPointerMoveHandle = ({ pointerId, global }) => {
-    const {
-      current: { pointerId: _pointerId, offset }
-    } = dragDefinitionRef;
+    const { current: _pointerId } = pointerIdRef;
 
     pointerId === _pointerId &&
       (() => {
-        const refCurrent = /** @type {pixiJs.Container} */ (ref.current);
+        const refCurrentGraphics = /** @type {pixiJs.Container} */ (
+          ref.current
+        ).getChildAt(0);
 
         Object.assign(
-          refCurrent,
+          refCurrentGraphics,
           /** @type {pixiJs.ContainerOptions} */ ({
             position: (() => {
-              const { x, y } = refCurrent.parent.toLocal(global);
+              const { x: _x } = refCurrentGraphics.parent.toLocal(global);
 
-              const { x: _x, y: _y } = offset;
+              const { width, height } = dimension;
 
-              return { x: x + _x, y: y + _y };
+              const x = Math.max(0, Math.min(_x, width - height));
+
+              scaleFactorSet((x / (width - height) - 0.5) * 2);
+
+              const {
+                position: { y }
+              } = refCurrentGraphics;
+
+              return { x, y };
             })()
           })
         );
@@ -83,50 +106,19 @@ const LayoutContainer_ = () => {
   };
 
   /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
-  const onPointerDownHandle = ({ pointerId, global, currentTarget }) => {
-    Object.assign(dragDefinitionRef, {
-      current: /** @type {typeof dragDefinitionInitialized} */ ({
-        pointerId,
-        offset: (() => {
-          const {
-            position: { x, y }
-          } = currentTarget;
-
-          const { x: _x, y: _y } = currentTarget.parent.toLocal(global);
-
-          return { x: x - _x, y: y - _y };
-        })()
-      })
-    });
-
-    Object.assign(
-      currentTarget,
-      /** @type {pixiJs.ContainerOptions} */ ({
-        alpha: 0.75
-      })
-    );
+  const onPointerDownHandle = ({ pointerId }) => {
+    Object.assign(pointerIdRef, { current: pointerId });
 
     stage.on('pointermove', onPointerMoveHandle);
   };
 
   /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
-  const onPointerUpHandle = ({ pointerId, currentTarget }) => {
-    const {
-      current: { pointerId: _pointerId }
-    } = dragDefinitionRef;
+  const onPointerUpHandle = ({ pointerId }) => {
+    const { current: _pointerId } = pointerIdRef;
 
     pointerId === _pointerId &&
       (() => {
-        Object.assign(dragDefinitionRef, {
-          current: dragDefinitionInitialized
-        });
-
-        Object.assign(
-          currentTarget,
-          /** @type {pixiJs.ContainerOptions} */ ({
-            alpha: 1
-          })
-        );
+        Object.assign(pointerIdRef, { current: undefined });
 
         stage.off('pointermove', onPointerMoveHandle);
       })();
@@ -136,54 +128,87 @@ const LayoutContainer_ = () => {
     <pixiLayoutContainer
       ref={ref}
       layout={{
-        position: 'absolute',
+        ...dimension,
         borderWidth: 1,
         borderColor: 0x00ff00
       }}
-      position={(() => {
-        const { width, height } = displayDimension;
-
-        const { width: _width, height: _height } = texture;
-
-        return /** @type {{ x: number; y: number }} */ (
-          Object.entries({
-            x: width - _width,
-            y: height - _height
-          }).reduce(
-            (memo, [key, value]) => ({
-              ...memo,
-              [key]: Math.random() * value
-            }),
-            {}
-          )
-        );
-      })()}
-      eventMode='static'
-      cursor='pointer'
-      onPointerDown={onPointerDownHandle}
-      onPointerUp={onPointerUpHandle}
-      onPointerUpOutside={onPointerUpHandle}
     >
-      <pixiSprite texture={texture} layout={{}} />
+      <pixiGraphics
+        draw={(graphics) =>
+          graphics
+            .rect(
+              ...(() => {
+                const { height } = dimension;
+
+                return /** @type {const} */ ([0, 0, height, height]);
+              })()
+            )
+            .fill({ color: 0x00ff00 })
+        }
+        position={(() => {
+          const { width, height } = dimension;
+
+          return { x: (width - height) / 2, y: 0 };
+        })()}
+        alpha={0.75}
+        eventMode='static'
+        cursor='pointer'
+        onPointerDown={onPointerDownHandle}
+        onPointerUp={onPointerUpHandle}
+        onPointerUpOutside={onPointerUpHandle}
+      />
     </pixiLayoutContainer>
   );
 };
 
+const Control = memo(Control_);
+
 const Home = () => {
   useExtend({ LayoutContainer });
+
+  const [scaleFactor, scaleFactorSet] = useState(0);
 
   return (
     <pixiLayoutContainer
       layout={{
         flex: 1,
-        position: 'relative',
-        borderWidth: 1,
+        borderWidth: 0,
         borderColor: 0xff0000
       }}
     >
-      {Array.from({ length: 10 }).map((_, index) => (
-        <LayoutContainer_ key={index} />
-      ))}
+      <pixiLayoutContainer
+        layout={{
+          flex: 1,
+          flexDirection: 'column',
+          marginBottom: 100,
+          borderWidth: 0,
+          borderColor: 0x00ff00
+        }}
+      >
+        <pixiLayoutContainer
+          layout={{
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'flex-end',
+            marginBottom: 20,
+            borderWidth: 0,
+            borderColor: 0xff0000
+          }}
+        >
+          <Sprite_ scaleFactor={scaleFactor} />
+        </pixiLayoutContainer>
+
+        <pixiLayoutContainer
+          layout={{
+            justifyContent: 'center',
+            alignItems: 'flex-end',
+            borderWidth: 0,
+            borderColor: 0x0000ff
+          }}
+        >
+          <Control scaleFactorSet={scaleFactorSet} />
+        </pixiLayoutContainer>
+      </pixiLayoutContainer>
     </pixiLayoutContainer>
   );
 };
