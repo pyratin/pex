@@ -1,290 +1,189 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { createRoot } from 'react-dom/client';
-import { useExtend } from '@pixi/react';
+import { useRef, useState, useEffect } from 'react';
+import { useExtend, useApplication } from '@pixi/react';
 import { useShallow } from 'zustand/react/shallow';
-import * as pixiLayout from '@pixi/layout';
 import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
-import { Graphics } from 'pixi.js';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import { PixiPlugin } from 'gsap/PixiPlugin';
+import { Assets, Texture, Sprite } from 'pixi.js';
 
 import useStore from '#/component/useStore';
-import style from './index.module.scss';
 
-gsap.registerPlugin(useGSAP, PixiPlugin);
-PixiPlugin.registerPIXI(pixiJs);
-
-const gridDimension = 50;
-
-/** @type {(index: number) => number} */
-const gridOffsetGet = (index) => index * gridDimension;
-
-const strokeDefinition = /** @type {pixiJs.StrokeStyle} */ ({
-  width: 1,
-  color: 0xcccccc
-});
-
-const Grid = () => {
-  useExtend({ Graphics });
-
-  const { width, height } = useStore(
-    useShallow(
-      ({
-        displayDefinition: {
-          dimension: { width, height }
-        }
-      }) => ({
-        width,
-        height
-      })
-    )
-  );
-
-  return (
-    <>
-      {Array.from({ length: Math.ceil(width / gridDimension) }).map(
-        (_, index) => (
-          <pixiGraphics
-            key={index}
-            draw={(graphics) =>
-              graphics
-                .moveTo(gridOffsetGet(index), 0)
-                .lineTo(gridOffsetGet(index), height)
-                .stroke(strokeDefinition)
-            }
-          />
-        )
-      )}
-
-      {Array.from({ length: Math.ceil(height / gridDimension) }).map(
-        (_, index) => (
-          <pixiGraphics
-            key={index}
-            draw={(graphics) =>
-              graphics
-                .moveTo(0, gridOffsetGet(index))
-                .lineTo(width, gridOffsetGet(index))
-                .stroke(strokeDefinition)
-            }
-          />
-        )
-      )}
-    </>
-  );
+const dragDefinitionInitialized = {
+  pointerId: undefined,
+  offset: { x: undefined, y: undefined }
 };
-
-const OriginMarker = () => {
-  useExtend({ Graphics });
-
-  return (
-    <pixiGraphics
-      label='OriginMarker'
-      draw={(graphics) =>
-        graphics
-          .moveTo(-10, 0)
-          .lineTo(10, 0)
-          .moveTo(0, -10)
-          .lineTo(0, 10)
-          .stroke({ width: 4, color: 0xff0000 })
-      }
-    />
-  );
-};
-
-const dimension = { width: 150, height: 100 };
 
 const LayoutContainer_ = () => {
-  useExtend({ LayoutContainer });
+  useExtend({ LayoutContainer, Sprite });
+
+  const {
+    app: { stage, screen }
+  } = useApplication();
+
+  const { displayDimension } = useStore(
+    useShallow(({ displayDefinition: { dimension } }) => ({
+      displayDimension: dimension
+    }))
+  );
 
   const ref = useRef(undefined);
 
-  useGSAP(
-    () => {
-      gsap.to(ref.current, {
-        pixi: { angle: 360 },
-        repeat: -1,
-        ease: 'none',
-        duration: 5
-      });
-    },
-    { dependencies: [] }
-  );
+  const dragDefinitionRef = useRef(dragDefinitionInitialized);
+
+  const [texture, textureSet] = useState(Texture.EMPTY);
+
+  useEffect(() => {
+    Assets.load('/asset/image/bunny.png').then((texture) => {
+      Object.assign(
+        texture.source,
+        /** @type {pixiJs.TextureSourceOptions} */ ({
+          scaleMode: 'nearest',
+          resolution: 1 / 3
+        })
+      );
+
+      /** @type {pixiJs.Texture} */ (texture).update();
+
+      textureSet(texture);
+    });
+  }, []);
+
+  useEffect(() => {
+    Object.assign(
+      stage,
+      /** @type {pixiJs.ContainerOptions} */ ({
+        eventMode: 'static',
+        hitArea: screen
+      })
+    );
+  }, [stage, screen]);
+
+  /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
+  const onPointerMoveHandle = ({ pointerId, global }) => {
+    const {
+      current: { pointerId: _pointerId, offset }
+    } = dragDefinitionRef;
+
+    pointerId === _pointerId &&
+      (() => {
+        const refCurrent = /** @type {pixiJs.Container} */ (ref.current);
+
+        Object.assign(
+          refCurrent,
+          /** @type {pixiJs.ContainerOptions} */ ({
+            position: (() => {
+              const { x, y } = refCurrent.parent.toLocal(global);
+
+              const { x: _x, y: _y } = offset;
+
+              return { x: x + _x, y: y + _y };
+            })()
+          })
+        );
+      })();
+  };
+
+  /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
+  const onPointerDownHandle = ({ pointerId, global, currentTarget }) => {
+    Object.assign(dragDefinitionRef, {
+      current: /** @type {typeof dragDefinitionInitialized} */ ({
+        pointerId,
+        offset: (() => {
+          const {
+            position: { x, y }
+          } = currentTarget;
+
+          const { x: _x, y: _y } = currentTarget.parent.toLocal(global);
+
+          return { x: x - _x, y: y - _y };
+        })()
+      })
+    });
+
+    Object.assign(
+      currentTarget,
+      /** @type {pixiJs.ContainerOptions} */ ({
+        alpha: 0.75
+      })
+    );
+
+    stage.on('pointermove', onPointerMoveHandle);
+  };
+
+  /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
+  const onPointerUpHandle = ({ pointerId, currentTarget }) => {
+    const {
+      current: { pointerId: _pointerId }
+    } = dragDefinitionRef;
+
+    pointerId === _pointerId &&
+      (() => {
+        Object.assign(dragDefinitionRef, {
+          current: dragDefinitionInitialized
+        });
+
+        Object.assign(
+          currentTarget,
+          /** @type {pixiJs.ContainerOptions} */ ({
+            alpha: 1
+          })
+        );
+
+        stage.off('pointermove', onPointerMoveHandle);
+      })();
+  };
 
   return (
     <pixiLayoutContainer
       ref={ref}
-      label='LayoutContainer_'
       layout={{
         position: 'absolute',
-        ...dimension,
-        borderWidth: 0,
+        borderWidth: 1,
         borderColor: 0x00ff00
       }}
-      position={{ x: 100, y: 100 }}
+      position={(() => {
+        const { width, height } = displayDimension;
+
+        const { width: _width, height: _height } = texture;
+
+        return /** @type {{ x: number; y: number }} */ (
+          Object.entries({
+            x: width - _width,
+            y: height - _height
+          }).reduce(
+            (memo, [key, value]) => ({
+              ...memo,
+              [key]: Math.random() * value
+            }),
+            {}
+          )
+        );
+      })()}
+      eventMode='static'
+      cursor='pointer'
+      onPointerDown={onPointerDownHandle}
+      onPointerUp={onPointerUpHandle}
+      onPointerUpOutside={onPointerUpHandle}
     >
-      <pixiGraphics
-        draw={(graphics) =>
-          graphics
-            .rect(
-              ...(() => {
-                const { width, height } = dimension;
-
-                return /** @type {const} */ ([0, 0, width, height]);
-              })()
-            )
-            .fill({ color: 0x3489db })
-            .stroke({ width: 4, color: 0x000000 })
-        }
-      />
-
-      <OriginMarker />
+      <pixiSprite texture={texture} layout={{}} />
     </pixiLayoutContainer>
-  );
-};
-
-const transformOrigininitializedGet = () =>
-  Object.values(dimension).map((value) => value / 2);
-
-const Control = ({ transformOrigin, transformOriginSet }) => {
-  const definitionCollection = ['x', 'y'].map((key, index) => ({
-    key,
-    value: transformOrigin[index],
-    max: Object.values(dimension)[index]
-  }));
-
-  return (
-    <div className={style.Control}>
-      <h3>Adjust Origin</h3>
-
-      <div>
-        {definitionCollection.map(({ key, value, max }, index) => (
-          <div key={index}>
-            <label htmlFor={key} className='form-label'>
-              {key}:
-            </label>
-
-            <input
-              type='range'
-              className='form-range'
-              id={key}
-              value={value}
-              min={0}
-              max={max}
-              step={5}
-              onChange={({ target: { valueAsNumber } }) => {
-                transformOriginSet(
-                  /** @type {(transformOrigin: number[]) => number[]} */
-                  (transformOrigin) => {
-                    return transformOrigin.map((value, _index) => {
-                      return _index === index ? valueAsNumber : value;
-                    });
-                  }
-                );
-              }}
-            />
-          </div>
-        ))}
-      </div>
-
-      <button
-        className='btn btn-outline-light btn-sm'
-        onClick={() => transformOriginSet(transformOrigininitializedGet())}
-      >
-        Reset
-      </button>
-    </div>
   );
 };
 
 const Home = () => {
   useExtend({ LayoutContainer });
 
-  const ref = useRef(undefined);
-
-  const rootRef = useRef(undefined);
-
-  const [transformOrigin, transformOriginSet] = useState(
-    transformOrigininitializedGet()
-  );
-
-  useEffect(() => {
-    const refCurrent = /** @type {pixiJs.Container} */ (ref.current);
-
-    Object.assign(
-      refCurrent.getChildByLabel('LayoutContainer_'),
-      /** @type {pixiJs.ContainerOptions} */ ({
-        layout: /** @type {pixiLayout.LayoutOptions} */ ({
-          transformOrigin: transformOrigin.join(', ')
-        })
-      })
-    );
-
-    Object.assign(
-      refCurrent
-        .getChildByLabel('LayoutContainer_')
-        .getChildByLabel('OriginMarker'),
-      /** @type {pixiJs.ContainerOptions} */ ({
-        position: transformOrigin.reduce(
-          (memo, value, index) => ({
-            ...memo,
-            [!index ? 'x' : 'y']: value
-          }),
-          {}
-        )
-      })
-    );
-  }, [transformOrigin]);
-
-  useEffect(() => {
-    const element = document.createElement('div');
-
-    document.body.appendChild(element);
-
-    Object.assign(
-      element.style,
-      /** @type {React.CSSProperties} */ ({
-        position: 'absolute',
-        top: 0,
-        right: 0
-      })
-    );
-
-    const root = createRoot(element);
-
-    Object.assign(rootRef, { current: root });
-
-    return () => {
-      root.unmount();
-
-      element.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    rootRef.current.render(
-      <Control
-        transformOrigin={transformOrigin}
-        transformOriginSet={transformOriginSet}
-      />
-    );
-  }, [transformOrigin]);
-
   return (
     <pixiLayoutContainer
-      ref={ref}
       layout={{
-        position: 'relative',
         flex: 1,
+        position: 'relative',
         borderWidth: 1,
-        borderColor: 0xff0000,
-        backgroundColor: 0xffffff
+        borderColor: 0xff0000
       }}
     >
-      <Grid />
-
-      <LayoutContainer_ />
+      {Array.from({ length: 10 }).map((_, index) => (
+        <LayoutContainer_ key={index} />
+      ))}
     </pixiLayoutContainer>
   );
 };
