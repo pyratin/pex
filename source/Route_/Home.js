@@ -3,29 +3,49 @@ import { useExtend } from '@pixi/react';
 import { LayoutContainer } from '@pixi/layout/components';
 import { Assets, Texture, Sprite } from 'pixi.js';
 
-const assetAliasCollection = ['flowerTop', 'eggHead'];
+/** @type {[string, string[]][]} */
+const bundleDefinitionCollection = [
+  ['start-screen', ['flowerTop']],
+  ['game-screen', ['eggHead']]
+];
 
 const LayoutContainer_ = () => {
   useExtend({ LayoutContainer, Sprite });
 
-  const [assetAliasIndex, assetAliasIndexSet] = useState(0);
+  const [bundleDefinitionIndex, bundleDefinitionIndexSet] = useState(0);
 
   const [texture, textureSet] = useState(Texture.EMPTY);
 
   useEffect(() => {
-    Assets.add(
-      assetAliasCollection.map((alias) => ({
-        alias,
-        src: `/asset/image/${alias}.png`
-      }))
-    );
+    Assets.init({
+      manifest: {
+        bundles: bundleDefinitionCollection.map(
+          ([name, assetAliasCollection]) => ({
+            name,
+            assets: assetAliasCollection.map((alias) => ({
+              alias,
+              src: `/asset/image/${alias}.png`
+            }))
+          })
+        )
+      }
+    });
 
-    Assets.backgroundLoad(assetAliasCollection);
+    Assets.backgroundLoadBundle(
+      bundleDefinitionCollection.map(([name]) => name)
+    );
   }, []);
 
   useEffect(() => {
-    Assets.load(assetAliasCollection[assetAliasIndex]).then(textureSet);
-  }, [assetAliasIndex]);
+    const [name, assetAliasCollection] =
+      bundleDefinitionCollection[bundleDefinitionIndex];
+
+    Assets.loadBundle(name)
+      .then((assetObject) =>
+        assetAliasCollection.map((alias) => assetObject[alias])
+      )
+      .then(([texture]) => textureSet(texture));
+  }, [bundleDefinitionIndex]);
 
   return (
     <pixiLayoutContainer
@@ -37,7 +57,9 @@ const LayoutContainer_ = () => {
       eventMode='static'
       cursor='pointer'
       onPointerTap={() =>
-        assetAliasIndexSet((assetAliasIndex) => Number(!assetAliasIndex))
+        bundleDefinitionIndexSet((bundleDefinitionIndex) =>
+          Number(!bundleDefinitionIndex)
+        )
       }
     >
       <pixiSprite texture={texture} layout={{}} />
