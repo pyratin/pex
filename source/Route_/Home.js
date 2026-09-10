@@ -1,61 +1,46 @@
-import { useRef, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useExtend } from '@pixi/react';
 import { LayoutContainer } from '@pixi/layout/components';
-import * as pixiJs from 'pixi.js';
-import { Assets, Texture, AnimatedSprite } from 'pixi.js';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import { PixiPlugin } from 'gsap/PixiPlugin';
+import { Assets, Texture, Sprite } from 'pixi.js';
 
-gsap.registerPlugin(useGSAP, PixiPlugin);
-PixiPlugin.registerPIXI(pixiJs);
+const assetAliasCollection = ['flowerTop', 'eggHead'];
 
 const LayoutContainer_ = () => {
-  useExtend({ LayoutContainer, AnimatedSprite });
+  useExtend({ LayoutContainer, Sprite });
 
-  const ref = useRef(undefined);
+  const [assetAliasIndex, assetAliasIndexSet] = useState(0);
 
-  const [textureCollection, textureCollectionSet] = useState([Texture.EMPTY]);
+  const [texture, textureSet] = useState(Texture.EMPTY);
 
   useEffect(() => {
-    Assets.load('/asset/sprite/fighter.json').then(({ textures }) =>
-      textureCollectionSet(Object.values(textures))
+    Assets.add(
+      assetAliasCollection.map((alias) => ({
+        alias,
+        src: `/asset/image/${alias}.png`
+      }))
     );
+
+    Assets.backgroundLoad(assetAliasCollection);
   }, []);
 
   useEffect(() => {
-    textureCollection[0] !== Texture.EMPTY &&
-      /** @type {pixiJs.AnimatedSprite} */ (
-        /** @type {pixiJs.Container} */ (ref.current).getChildAt(0)
-      ).play();
-  }, [textureCollection]);
-
-  useGSAP(
-    () => {
-      gsap.to(ref.current, {
-        pixi: { angle: 360 },
-        repeat: -1,
-        ease: 'none',
-        duration: 5
-      });
-    },
-    { dependencies: [] }
-  );
+    Assets.load(assetAliasCollection[assetAliasIndex]).then(textureSet);
+  }, [assetAliasIndex]);
 
   return (
     <pixiLayoutContainer
-      ref={ref}
       layout={{
         padding: 20,
         borderWidth: 1,
         borderColor: 0x00ff00
       }}
+      eventMode='static'
+      cursor='pointer'
+      onPointerTap={() =>
+        assetAliasIndexSet((assetAliasIndex) => Number(!assetAliasIndex))
+      }
     >
-      <pixiAnimatedSprite
-        textures={textureCollection}
-        layout={{}}
-        animationSpeed={0.5}
-      />
+      <pixiSprite texture={texture} layout={{}} />
     </pixiLayoutContainer>
   );
 };
