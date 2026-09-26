@@ -1,66 +1,47 @@
-import { useRef } from 'react';
 import { useExtend } from '@pixi/react';
 import { useShallow } from 'zustand/react/shallow';
 import _ from 'lodash';
 import { LayoutContainer } from '@pixi/layout/components';
-import * as pixiJs from 'pixi.js';
-import { Graphics } from 'pixi.js';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import { PixiPlugin } from 'gsap/PixiPlugin';
 
 import useStore from '#/component/useStore';
 
-gsap.registerPlugin(useGSAP, PixiPlugin);
-PixiPlugin.registerPIXI(pixiJs);
+const length = 16;
 
-const radius = 25;
+const dimension = 25;
 
-const centerCoordinateGet = _.memoize(
-  (displayDimension) => {
-    return Object.values(displayDimension).reduce(
-      (memo, value, index) => ({
-        ...memo,
-        [!index ? 'x' : 'y']: value / 2 - radius
-      }),
-      {}
-    );
-  },
-  ({ width, height }) => `${width}-${height}`
-);
+const centerCoordinateGet = _.memoize((displayDimension) => {
+  return Object.values(displayDimension).reduce(
+    (memo, value, index) => ({
+      ...memo,
+      [!index ? 'x' : 'y']: (value - dimension) / 2
+    }),
+    {}
+  );
+});
 
-const positionGet = (() => {
-  let rotationX = 0;
+/** @type {(index: number) => number} */
+const rotationGet = (index) => ((Math.PI * 2) / length) * index;
 
-  let rotationXDelta = 0.01;
+/** @type {(index: number, displayDimension: object) => object} */
+const positionGet = (index, displayDimension) => {
+  const { x, y } = centerCoordinateGet(displayDimension);
 
-  let rotationY = 0;
+  const rotation = rotationGet(index);
 
-  let rotationYDelta = 0.02;
-
-  /** @type {(displayDimension: object) => object} */
-  return (displayDimension) => {
-    rotationX += rotationXDelta;
-
-    rotationY += rotationYDelta;
-
-    const { x, y } = centerCoordinateGet(displayDimension);
-
-    return Object.entries({ x, y }).reduce((memo, [key, value], index) => {
-      const [operator, rotation, _value] = !index
-        ? ['cos', rotationX, x]
-        : ['sin', rotationY, y];
+  return /** @type {{ x: number; y: number }} */ (
+    Object.entries({ x, y }).reduce((memo, [key, value], index) => {
+      const [operator] = !index ? ['cos'] : ['sin'];
 
       return {
         ...memo,
-        [key]: value + Math[operator](rotation) * _value
+        [key]: value + Math[operator](rotation) * x
       };
-    }, {});
-  };
-})();
+    }, {})
+  );
+};
 
-const LayoutContainer_ = () => {
-  useExtend({ LayoutContainer, Graphics });
+const LayoutContainer_ = ({ index }) => {
+  useExtend({ LayoutContainer });
 
   const { displayDimension } = useStore(
     useShallow(({ displayDefinition: { dimension } }) => ({
@@ -68,46 +49,18 @@ const LayoutContainer_ = () => {
     }))
   );
 
-  const ref = useRef(undefined);
-
-  useGSAP(
-    () => {
-      const fn = () => {
-        Object.assign(
-          ref.current,
-          /** @type {pixiJs.ContainerOptions} */ ({
-            position: positionGet(displayDimension)
-          })
-        );
-      };
-
-      gsap.ticker.add(fn);
-
-      gsap.ticker.fps(60);
-
-      return () => {
-        gsap.ticker.remove(fn);
-      };
-    },
-    { dependencies: [displayDimension], revertOnUpdate: true }
-  );
-
   return (
     <pixiLayoutContainer
-      ref={ref}
       layout={{
         position: 'absolute',
+        width: dimension,
+        height: dimension,
         borderWidth: 0,
-        borderColor: 0x00ff00
+        borderColor: 0x00ff00,
+        backgroundColor: 0x00ff00
       }}
-    >
-      <pixiGraphics
-        draw={(graphics) =>
-          graphics.circle(0, 0, radius).fill({ color: 0x00ff00 })
-        }
-        layout={{}}
-      />
-    </pixiLayoutContainer>
+      position={positionGet(index, displayDimension)}
+    ></pixiLayoutContainer>
   );
 };
 
@@ -123,7 +76,9 @@ const Home = () => {
         borderColor: 0xff0000
       }}
     >
-      <LayoutContainer_ />
+      {Array.from({ length }).map((_, index) => (
+        <LayoutContainer_ key={index} index={index} />
+      ))}
     </pixiLayoutContainer>
   );
 };
