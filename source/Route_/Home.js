@@ -1,66 +1,33 @@
 import { useExtend } from '@pixi/react';
-import { useShallow } from 'zustand/react/shallow';
-import _ from 'lodash';
 import { LayoutContainer } from '@pixi/layout/components';
+import * as pixiJs from 'pixi.js';
+import { Graphics } from 'pixi.js';
 
-import useStore from '#/component/useStore';
-
-const length = 16;
-
-const dimension = 25;
-
-const centerCoordinateGet = _.memoize((displayDimension) => {
-  return Object.values(displayDimension).reduce(
-    (memo, value, index) => ({
-      ...memo,
-      [!index ? 'x' : 'y']: (value - dimension) / 2
-    }),
-    {}
-  );
-});
-
-/** @type {(index: number) => number} */
-const rotationGet = (index) => ((Math.PI * 2) / length) * index;
-
-/** @type {(index: number, displayDimension: object) => object} */
-const positionGet = (index, displayDimension) => {
-  const { x, y } = centerCoordinateGet(displayDimension);
-
-  const rotation = rotationGet(index);
-
-  return /** @type {{ x: number; y: number }} */ (
-    Object.entries({ x, y }).reduce((memo, [key, value], index) => {
-      const [operator] = !index ? ['cos'] : ['sin'];
-
-      return {
-        ...memo,
-        [key]: value + Math[operator](rotation) * x
-      };
-    }, {})
-  );
-};
-
-const LayoutContainer_ = ({ index }) => {
-  useExtend({ LayoutContainer });
-
-  const { displayDimension } = useStore(
-    useShallow(({ displayDefinition: { dimension } }) => ({
-      displayDimension: dimension
-    }))
-  );
+const LayoutContainer_ = () => {
+  useExtend({ LayoutContainer, Graphics });
 
   return (
     <pixiLayoutContainer
       layout={{
-        position: 'absolute',
-        width: dimension,
-        height: dimension,
-        borderWidth: 0,
-        borderColor: 0x00ff00,
-        backgroundColor: 0x00ff00
+        borderWidth: 1,
+        borderColor: 0x00ff00
       }}
-      position={positionGet(index, displayDimension)}
-    ></pixiLayoutContainer>
+      scale={5}
+    >
+      <pixiGraphics
+        draw={(graphics) =>
+          graphics
+            .moveTo(0, 0)
+            .lineTo(-10, -10)
+            .moveTo(0, 0)
+            .lineTo(-10, 10)
+            .moveTo(0, 0)
+            .lineTo(-30, 0)
+            .stroke({ width: 4, color: 0x00ff00 })
+        }
+        layout={{}}
+      />
+    </pixiLayoutContainer>
   );
 };
 
@@ -70,15 +37,37 @@ const Home = () => {
   return (
     <pixiLayoutContainer
       layout={{
-        position: 'relative',
         flex: 1,
-        borderWidth: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
         borderColor: 0xff0000
       }}
+      eventMode='static'
+      cursor='pointer'
+      onPointerMove={
+        /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
+        ({ client, currentTarget }) => {
+          const element = currentTarget.getChildAt(0);
+
+          Object.assign(
+            element,
+            /** @type {pixiJs.ContainerOptions} */ ({
+              rotation: (() => {
+                const { x, y } = client;
+
+                const {
+                  layout: { realX, realY }
+                } = element;
+
+                return Math.atan2(y - realY, x - realX);
+              })()
+            })
+          );
+        }
+      }
     >
-      {Array.from({ length }).map((_, index) => (
-        <LayoutContainer_ key={index} index={index} />
-      ))}
+      <LayoutContainer_ />
     </pixiLayoutContainer>
   );
 };
