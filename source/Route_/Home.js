@@ -1,79 +1,91 @@
+import { useRef } from 'react';
 import { useExtend } from '@pixi/react';
 import { useShallow } from 'zustand/react/shallow';
+import _ from 'lodash';
 import { LayoutContainer } from '@pixi/layout/components';
+import * as pixiJs from 'pixi.js';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+import { PixiPlugin } from 'gsap/PixiPlugin';
 
 import useStore from '#/component/useStore';
 
-const delta = 0.1;
+gsap.registerPlugin(useGSAP, PixiPlugin);
+PixiPlugin.registerPIXI(pixiJs);
 
-const length = (Math.PI * 2) / delta;
+const dimension = 50;
 
-/** @type {(index: number, dimension: number) => object} */
-const positionGet = (index, dimension) => {
-  const yScale = 350;
+const centerCoordinateGet = _.memoize(
+  (displayDimension) => {
+    return Object.values(displayDimension).reduce((memo, value, index) => {
+      const key = !index ? 'x' : 'y';
 
-  return {
-    x: index * dimension,
-    y: (dimension * length) / 2 + Math.sin(index * delta) * yScale
-  };
-};
+      return {
+        ...memo,
+        [key]: (value - dimension) * 0.5
+      };
+    }, {});
+  },
+  ({ width, height }) => `${width}-${height}`
+);
 
-const LayoutContainer__ = ({ index, dimension }) => {
-  useExtend({ LayoutContainer });
+/** @type {(frame: number, displayDimension: object) => object} */
+const positionGet = (frame, displayDimension) => {
+  const { x, y } = centerCoordinateGet(displayDimension);
 
-  return (
-    <pixiLayoutContainer
-      layout={{
-        position: 'absolute',
-        width: dimension,
-        height: dimension
-      }}
-      position={positionGet(index, dimension)}
-    >
-      <pixiLayoutContainer
-        layout={{
-          width: dimension * 0.5,
-          height: dimension * 0.5,
-          borderWidth: 1,
-          borderColor: 0xffffff
-        }}
-      ></pixiLayoutContainer>
-    </pixiLayoutContainer>
-  );
+  return Object.entries({ x, y }).reduce((memo, [key, value], index) => {
+    const [operator, _value] = !index ? ['cos', 0.01] : ['sin', 0.02];
+
+    return {
+      ...memo,
+      [key]: value + Math[operator](frame * _value) * value
+    };
+  }, {});
 };
 
 const LayoutContainer_ = () => {
   useExtend({ LayoutContainer });
 
   const { displayDimension } = useStore(
-    useShallow(
-      ({
-        displayDefinition: {
-          dimension: { width, height }
-        }
-      }) => ({
-        displayDimension: Math.min(width, height)
-      })
-    )
+    useShallow(({ displayDefinition: { dimension } }) => ({
+      displayDimension: dimension
+    }))
+  );
+
+  const ref = useRef(undefined);
+
+  useGSAP(
+    () => {
+      const refCurrent = /** @type {pixiJs.Container} */ (ref.current);
+
+      /** @type {(_: number, __: number, frame: number) => void} */
+      const fn = (_, __, frame) => {
+        Object.assign(
+          refCurrent,
+          /** @type {pixiJs.ContainerOptions} */ ({
+            position: positionGet(frame, displayDimension)
+          })
+        );
+      };
+
+      gsap.ticker.add(fn);
+
+      return () => gsap.ticker.remove(fn);
+    },
+    { dependencies: [] }
   );
 
   return (
     <pixiLayoutContainer
+      ref={ref}
       layout={{
-        width: displayDimension,
-        height: displayDimension,
-        borderWidth: 0,
+        position: 'absolute',
+        width: dimension,
+        height: dimension,
+        borderWidth: 1,
         borderColor: 0x00ff00
       }}
-    >
-      {Array.from({ length }).map((_, index) => (
-        <LayoutContainer__
-          key={index}
-          index={index}
-          dimension={displayDimension / length}
-        />
-      ))}
-    </pixiLayoutContainer>
+    ></pixiLayoutContainer>
   );
 };
 
@@ -83,9 +95,8 @@ const Home = () => {
   return (
     <pixiLayoutContainer
       layout={{
+        position: 'relative',
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
         borderWidth: 0,
         borderColor: 0xff0000
       }}
