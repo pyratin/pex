@@ -1,49 +1,52 @@
-import { useRef } from 'react';
 import { useExtend } from '@pixi/react';
 import { useShallow } from 'zustand/react/shallow';
 import _ from 'lodash';
 import { LayoutContainer } from '@pixi/layout/components';
-import * as pixiJs from 'pixi.js';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import { PixiPlugin } from 'gsap/PixiPlugin';
 
 import useStore from '#/component/useStore';
 
-gsap.registerPlugin(useGSAP, PixiPlugin);
-PixiPlugin.registerPIXI(pixiJs);
+const length = 320;
 
-const dimension = 50;
+const dimension = 10;
 
 const centerCoordinateGet = _.memoize(
   (displayDimension) => {
-    return Object.values(displayDimension).reduce((memo, value, index) => {
-      const key = !index ? 'x' : 'y';
+    return /** @type {{ x: number; y: number }} */ (
+      Object.values(displayDimension).reduce((memo, value, index) => {
+        const key = !index ? 'x' : 'y';
+
+        return {
+          ...memo,
+          [key]: (value - dimension) * 0.5
+        };
+      }, {})
+    );
+  },
+  (object) => Object.values(object).join('-')
+);
+
+/** @type {(index: number) => number} */
+const rotationGet = (index) => index * ((Math.PI * 2) / length);
+
+/** @type {(index: number, displayDimension: object) => object} */
+const positionGet = (index, displayDimension) => {
+  const { x, y } = centerCoordinateGet(displayDimension);
+
+  const rotation = rotationGet(index);
+
+  return /** @type {{ x: number; y: number }} */ (
+    Object.entries({ x, y }).reduce((memo, [key, value], index) => {
+      const [operator, _value] = !index ? ['cos', 1] : ['sin', 2];
 
       return {
         ...memo,
-        [key]: (value - dimension) * 0.5
+        [key]: value + Math[operator](rotation * _value) * value
       };
-    }, {});
-  },
-  ({ width, height }) => `${width}-${height}`
-);
-
-/** @type {(frame: number, displayDimension: object) => object} */
-const positionGet = (frame, displayDimension) => {
-  const { x, y } = centerCoordinateGet(displayDimension);
-
-  return Object.entries({ x, y }).reduce((memo, [key, value], index) => {
-    const [operator, _value] = !index ? ['cos', 0.01] : ['sin', 0.02];
-
-    return {
-      ...memo,
-      [key]: value + Math[operator](frame * _value) * value
-    };
-  }, {});
+    }, {})
+  );
 };
 
-const LayoutContainer_ = () => {
+const LayoutContainer_ = ({ index }) => {
   useExtend({ LayoutContainer });
 
   const { displayDimension } = useStore(
@@ -52,32 +55,8 @@ const LayoutContainer_ = () => {
     }))
   );
 
-  const ref = useRef(undefined);
-
-  useGSAP(
-    () => {
-      const refCurrent = /** @type {pixiJs.Container} */ (ref.current);
-
-      /** @type {(_: number, __: number, frame: number) => void} */
-      const fn = (_, __, frame) => {
-        Object.assign(
-          refCurrent,
-          /** @type {pixiJs.ContainerOptions} */ ({
-            position: positionGet(frame, displayDimension)
-          })
-        );
-      };
-
-      gsap.ticker.add(fn);
-
-      return () => gsap.ticker.remove(fn);
-    },
-    { dependencies: [] }
-  );
-
   return (
     <pixiLayoutContainer
-      ref={ref}
       layout={{
         position: 'absolute',
         width: dimension,
@@ -85,6 +64,7 @@ const LayoutContainer_ = () => {
         borderWidth: 1,
         borderColor: 0x00ff00
       }}
+      position={positionGet(index, displayDimension)}
     ></pixiLayoutContainer>
   );
 };
@@ -95,13 +75,14 @@ const Home = () => {
   return (
     <pixiLayoutContainer
       layout={{
-        position: 'relative',
         flex: 1,
         borderWidth: 0,
         borderColor: 0xff0000
       }}
     >
-      <LayoutContainer_ />
+      {Array.from({ length }).map((_, index) => (
+        <LayoutContainer_ key={index} index={index} />
+      ))}
     </pixiLayoutContainer>
   );
 };
