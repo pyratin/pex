@@ -1,91 +1,87 @@
 import { useRef } from 'react';
 import { useExtend } from '@pixi/react';
 import { useShallow } from 'zustand/react/shallow';
-import * as pixiLayout from '@pixi/layout';
 import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+import { PixiPlugin } from 'gsap/PixiPlugin';
 
 import useStore from '#/component/useStore';
 
-const delta = 0.1;
+gsap.registerPlugin(useGSAP, PixiPlugin);
+PixiPlugin.registerPIXI(pixiJs);
 
-const length = (Math.PI * 2) / delta;
+const dimension = 50;
 
-const yScale = 100;
+/** @type {(displayDimension: object) => object} */
+const centerCoordinateGet = (displayDimension) =>
+  Object.values(displayDimension).reduce((memo, value, index) => {
+    const key = !index ? 'x' : 'y';
 
-/** @type {(index: number, dimension: object) => object} */
-const positionGet = (index, dimension) => {
-  return {
-    x: index * dimension,
-    y: Math.sin(index * delta) * yScale + yScale - dimension * 0.5
-  };
-};
+    return {
+      ...memo,
+      [key]: (value - dimension) * 0.5
+    };
+  }, {});
 
-const LayoutContainer__ = ({ index, dimension }) => {
-  useExtend({ LayoutContainer });
+/** @type {(frame: number, displayDimension: object) => object} */
+const positionGet = (frame, displayDimension) => {
+  const { x, y } = centerCoordinateGet(displayDimension);
 
-  return (
-    <pixiLayoutContainer
-      layout={{
-        position: 'absolute',
-        width: dimension * 0.5,
-        height: dimension * 0.5,
-        borderWidth: 1,
-        borderColor: 0xffffff
-      }}
-      position={positionGet(index, dimension)}
-    ></pixiLayoutContainer>
-  );
+  return Object.entries({ x, y }).reduce((memo, [key, value], index) => {
+    const [operator, _value, __value] = !index
+      ? ['cos', x, 0.01]
+      : ['sin', y, 0.02];
+
+    return {
+      ...memo,
+      [key]: value + Math[operator](frame * __value) * _value
+    };
+  }, {});
 };
 
 const LayoutContainer_ = () => {
   useExtend({ LayoutContainer });
 
-  const layoutInitializedFlagRef = useRef(false);
+  const ref = useRef(undefined);
 
   const { displayDimension } = useStore(
-    useShallow(
-      ({
-        displayDefinition: {
-          widthMaximum,
-          dimension: { width }
-        }
-      }) => ({
-        displayDimension: Math.min(widthMaximum, width)
-      })
-    )
+    useShallow(({ displayDefinition: { dimension } }) => ({
+      displayDimension: dimension
+    }))
+  );
+
+  useGSAP(
+    () => {
+      /** @type {(_: number, __: number, frame: number) => void} */
+      const fn = (_, __, frame) => {
+        Object.assign(
+          ref.current,
+          /** @type {pixiJs.ContainerOptions} */ ({
+            position: positionGet(frame, displayDimension)
+          })
+        );
+      };
+
+      gsap.ticker.add(fn);
+
+      return () => gsap.ticker.remove(fn);
+    },
+    { dependencies: [] }
   );
 
   return (
     <pixiLayoutContainer
+      ref={ref}
       layout={{
-        borderWidth: 0,
+        position: 'absolute',
+        width: dimension,
+        height: dimension,
+        borderWidth: 1,
         borderColor: 0x00ff00
       }}
-      onLayout={({ target }) => {
-        !layoutInitializedFlagRef.current &&
-          (() => {
-            Object.assign(
-              target,
-              /** @type {pixiJs.ContainerOptions} */ ({
-                layout: /** @type {pixiLayout.LayoutOptions} */ (
-                  target.getSize()
-                )
-              })
-            );
-
-            Object.assign(layoutInitializedFlagRef, { current: true });
-          })();
-      }}
-    >
-      {Array.from({ length }).map((_, index) => (
-        <LayoutContainer__
-          key={index}
-          index={index}
-          dimension={displayDimension / length}
-        />
-      ))}
-    </pixiLayoutContainer>
+    ></pixiLayoutContainer>
   );
 };
 
@@ -95,9 +91,8 @@ const Home = () => {
   return (
     <pixiLayoutContainer
       layout={{
+        position: 'relative',
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
         borderWidth: 0,
         borderColor: 0xff0000
       }}
