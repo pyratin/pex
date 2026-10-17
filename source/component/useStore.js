@@ -19,7 +19,7 @@ const displayDimensionGet = () => {
 const displayScaleFactorGet = (widthMaximum) => {
   const { width } = displayDimensionGet();
 
-  return Math.min(widthMaximum, width);
+  return Math.min(width / widthMaximum, 1);
 };
 
 const displayDefinitionGet = () => {
