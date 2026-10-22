@@ -1,124 +1,142 @@
-import { useRef, useEffect } from 'react';
-import { World } from 'miniplex';
-import random from 'random';
-import niceColorPalettes from 'nice-color-palettes';
+import { useMemo, useEffect } from 'react';
 import { useExtend } from '@pixi/react';
 import { useShallow } from 'zustand/react/shallow';
-import { useEntities } from 'miniplex-react';
+import random from 'random';
+import alea from 'alea';
+import { createNoise2D } from 'simplex-noise';
+import niceColorPalettes from 'nice-color-palettes';
 import { LayoutContainer } from '@pixi/layout/components';
-import * as pixiJs from 'pixi.js';
-import { Graphics } from 'pixi.js';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import { PixiPlugin } from 'gsap/PixiPlugin';
+import { Assets, BitmapFont, BitmapText } from 'pixi.js';
 
 import useStore from '#/component/useStore';
 
-gsap.registerPlugin(useGSAP, PixiPlugin);
-PixiPlugin.registerPIXI(pixiJs);
+const seed = Math.random();
 
-/** @typedef {{ x: number; y: number }} vectorType */
+random.use(seed);
 
-/**
- * @typedef {{
- *   label: string;
- *   dimension: number;
- *   position: vectorType;
- *   velocity: vectorType;
- *   acceleration: vectorType;
- *   age: number;
- *   ageInitial: number;
- *   color: string;
- * }} particleType
- */
+const noiseGet = createNoise2D(alea(seed));
 
-/** @type {World<particleType>} */
-const world = new World();
-
-/** @type {(displayDimension: object) => object} */
-const centerCoordinateGet = (displayDimension) =>
-  Object.values(displayDimension).reduce((memo, value, index) => {
-    const key = !index ? 'x' : 'y';
-
-    return {
-      ...memo,
-      [key]: value * 0.5
-    };
-  }, {});
-
-const randomNormalGet = random.normal();
-
-const randomNormalizedGet = () => Math.max(0, Math.min(randomNormalGet(), 1));
-
-/** @type {(displayDimension: object) => void} */
-const worldInitialize = (displayDimension) => {
-  world.clear();
-
-  const centerCoordinate = centerCoordinateGet(displayDimension);
-
-  const palette = random.choice(niceColorPalettes);
-
-  Array.from({ length: 100 }).map((_, index) => {
-    const age = Math.ceil(randomNormalizedGet() * (60 * 2) + 60);
-
-    world.add({
-      label: index.toString(),
-      dimension: randomNormalGet() * 15 + 25,
-      position: { ...centerCoordinate },
-      velocity: (() => {
-        const rotation = randomNormalGet() * (Math.PI * 2);
-
-        const speed = randomNormalGet() * 5 + 2;
-
-        return /** @type {{ x: number; y: number }} */ (
-          ['x', 'y'].reduce((memo, key, index) => {
-            const operator = !index ? 'cos' : 'sin';
-
-            return {
-              ...memo,
-              [key]: Math[operator](rotation) * speed
-            };
-          }, {})
-        );
-      })(),
-      acceleration: { x: 0, y: 0.025 },
-      age,
-      ageInitial: age,
-      color: palette[index % palette.length]
-    });
-  });
-};
-
-const LayoutContainer_ = ({ entity: { label, dimension, color } }) => {
-  useExtend({ LayoutContainer, Graphics });
-
-  const graphicsInitializedFlagRef = useRef(false);
+const LayoutContainer__ = ({
+  definition: { dimension, position, rotation, color }
+}) => {
+  useExtend({ LayoutContainer, BitmapText });
 
   return (
     <pixiLayoutContainer
-      label={label}
       layout={{
         position: 'absolute',
-        width: dimension,
-        height: dimension,
+        justifyContent: 'center',
+        alignItems: 'center',
         borderWidth: 0,
         borderColor: color
       }}
+      position={position}
+      rotation={rotation}
     >
-      <pixiGraphics
-        draw={(graphics) =>
-          !graphicsInitializedFlagRef.current &&
-          (() => {
-            graphics
-              .poly([dimension * 0.5, 0, dimension, dimension, 0, dimension])
-              .fill({ color });
-
-            Object.assign(graphicsInitializedFlagRef, { current: true });
-          })()
-        }
+      <pixiBitmapText
+        text='='
         layout={{}}
-        rotation={Math.PI * 0.5}
+        style={{
+          fontFamily: '_ShortStack',
+          fontSize: dimension * 3,
+          fill: color
+        }}
       />
+    </pixiLayoutContainer>
+  );
+};
+
+const LayoutContainer_ = () => {
+  useExtend({ LayoutContainer });
+
+  useEffect(() => {
+    Assets.load({
+      alias: 'ShortStack',
+      src: '/asset/font/ShortStack-Regular.ttf',
+      data: { family: 'ShortStack' }
+    }).then(() => {
+      BitmapFont.install({
+        name: '_ShortStack',
+        style: {
+          fontFamily: 'ShortStack',
+          fontSize: 32,
+          fontWeight: 'lighter',
+          fill: 0xffffff
+        }
+      });
+    });
+  }, []);
+
+  const { displayDimension } = useStore(
+    useShallow(
+      ({
+        displayDefinition: {
+          widthMaximum,
+          dimension: { width }
+        }
+      }) => ({
+        displayDimension: Math.min(widthMaximum, width)
+      })
+    )
+  );
+
+  const definitionCollection = useMemo(() => {
+    const rowColumnCount = 50;
+
+    const gridDimension = displayDimension / rowColumnCount;
+
+    const palette = random.choice(niceColorPalettes);
+
+    return Array.from({ length: rowColumnCount ** 2 })
+      .map((_, index) => {
+        const [x, y] = [
+          index % rowColumnCount,
+          Math.floor(index / rowColumnCount)
+        ];
+
+        const noise =
+          noiseGet(
+            .../** @type {[number, number]} */ (
+              [x, y].map((value) => value * 0.05)
+            )
+          ) *
+            0.5 +
+          0.5;
+
+        const dimension = noise * gridDimension;
+
+        return {
+          dimension,
+          position: Object.entries({ x, y }).reduce(
+            (memo, [key, value]) => ({
+              ...memo,
+              [key]: value * gridDimension + (gridDimension - dimension) * 0.5
+            }),
+            {}
+          ),
+          rotation: noise * (Math.PI * 2),
+          color:
+            palette[
+              Math.min(Math.floor(noise * palette.length), palette.length - 1)
+            ]
+        };
+      })
+      .filter(() => random.boolean());
+  }, [displayDimension]);
+
+  return (
+    <pixiLayoutContainer
+      layout={{
+        position: 'relative',
+        width: displayDimension,
+        height: displayDimension,
+        borderWidth: 1,
+        borderColor: 0x00ff00
+      }}
+    >
+      {definitionCollection.map((definition, index) => (
+        <LayoutContainer__ key={index} definition={definition} />
+      ))}
     </pixiLayoutContainer>
   );
 };
@@ -126,115 +144,17 @@ const LayoutContainer_ = ({ entity: { label, dimension, color } }) => {
 const Home = () => {
   useExtend({ LayoutContainer });
 
-  const { displayDimension } = useStore(
-    useShallow(({ displayDefinition: { dimension } }) => ({
-      displayDimension: dimension
-    }))
-  );
-
-  const particleSystem = useEntities(world.with('label'));
-
-  const ref = useRef(undefined);
-
-  const worldInitializedFlagRef = useRef(undefined);
-
-  useEffect(() => {
-    !worldInitializedFlagRef.current &&
-      (() => {
-        worldInitialize(displayDimension);
-
-        Object.assign(worldInitializedFlagRef, { current: true });
-      })();
-  }, [displayDimension]);
-
-  useGSAP(
-    () => {
-      const fn = () => {
-        particleSystem.entities.length
-          ? particleSystem.entities.map((entity) => {
-              const {
-                label,
-                position,
-                velocity,
-                acceleration,
-                age,
-                ageInitial
-              } = entity;
-
-              const _age = age - 1;
-
-              const element = /** @type {pixiJs.Container} */ (
-                ref.current
-              ).getChildByLabel(label);
-
-              _age
-                ? element &&
-                  (() => {
-                    const _velocity = (() => {
-                      const { x, y } = velocity;
-
-                      const { x: _x, y: _y } = acceleration;
-
-                      return { x: x + _x, y: y + _y };
-                    })();
-
-                    const _position = (() => {
-                      const { x, y } = position;
-
-                      const { x: _x, y: _y } = _velocity;
-
-                      return { x: x + _x, y: y + _y };
-                    })();
-
-                    Object.assign(
-                      entity,
-                      /** @type {particleType} */ ({
-                        position: _position,
-                        velocity: _velocity,
-                        age: _age
-                      })
-                    );
-
-                    const ageScale = _age / ageInitial;
-
-                    Object.assign(
-                      element,
-                      /** @type {pixiJs.ContainerOptions} */ ({
-                        position: _position,
-                        scale: ageScale,
-                        rotation: (() => {
-                          const { x, y } = _velocity;
-
-                          return Math.atan2(y, x);
-                        })(),
-                        alpha: ageScale
-                      })
-                    );
-                  })()
-                : world.remove(entity);
-            })
-          : worldInitialize(displayDimension);
-      };
-
-      gsap.ticker.add(fn);
-
-      return () => gsap.ticker.remove(fn);
-    },
-    { dependencies: [displayDimension], revertOnUpdate: true }
-  );
-
   return (
     <pixiLayoutContainer
-      ref={ref}
       layout={{
         flex: 1,
-        borderWidth: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
         borderColor: 0xff0000
       }}
     >
-      {particleSystem.entities.map((entity) => (
-        <LayoutContainer_ key={entity.label} entity={entity} />
-      ))}
+      <LayoutContainer_ />
     </pixiLayoutContainer>
   );
 };
