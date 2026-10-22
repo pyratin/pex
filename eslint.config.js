@@ -9,7 +9,7 @@ import eslintPluginJsdoc from 'eslint-plugin-jsdoc';
 import eslintReactEslintPlugin from '@eslint-react/eslint-plugin';
 
 export default defineConfig([
-  { ignores: ['package-lock.json'] },
+  { ignores: ['package-lock.json', './target/'] },
   {
     files: ['**/*.{js,mjs,cjs,ts,mts,cts}'],
     plugins: { js },
