@@ -1,110 +1,141 @@
-import { useState, useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import { useExtend } from '@pixi/react';
 import { LayoutContainer } from '@pixi/layout/components';
+import { World } from 'miniplex';
+import { useEntities } from 'miniplex-react';
 import * as pixiJs from 'pixi.js';
-import { Assets, Text } from 'pixi.js';
-import { DropShadowFilter } from 'pixi-filters';
-import niceColorPalettes from 'nice-color-palettes';
+import { Graphics } from 'pixi.js';
+import random from 'random';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { PixiPlugin } from 'gsap/PixiPlugin';
+import Physics2DPlugin from 'gsap/Physics2DPlugin';
+import niceColorPalettes from 'nice-color-palettes';
+import { DropShadowFilter } from 'pixi-filters';
 
-gsap.registerPlugin(useGSAP, PixiPlugin);
+gsap.registerPlugin(useGSAP, PixiPlugin, Physics2DPlugin);
 PixiPlugin.registerPIXI(pixiJs);
 
-const textCollection = ['PixiJs', '&', 'GSAP', '❤️'];
+/** @typedef {{ x: number; y: number }} vectorType */
+
+/**
+ * @typedef {{
+ *   key: string;
+ *   dimension: number;
+ *   position: vectorType;
+ * }} particleType
+ */
+
+/** @type {World<particleType>} */
+const world = new World();
 
 const palette = niceColorPalettes[0];
 
-const LayoutContainer_ = ({ text }) => {
-  useExtend({ LayoutContainer, Text });
+const LayoutContainer_ = ({ entity }) => {
+  const { dimension, position } = entity;
+
+  useExtend({ Graphics });
+
+  const ref = useRef(undefined);
+
+  useGSAP(
+    () => {
+      const refCurrent = /** @type {pixiJs.Graphics} */ (ref.current);
+
+      gsap
+        .timeline({
+          onComplete: () => world.remove(entity)
+        })
+        .to(refCurrent, {
+          pixi: { scale: random.float(0.3, 1) },
+          duration: 0.02,
+          ease: 'power3.out'
+        })
+        .to(refCurrent, {
+          physics2D: {
+            velocity: random.int(500, 1000),
+            angle: random.int(0, 360),
+            gravity: 1500
+          },
+          duration: 2,
+          ease: 'none'
+        });
+    },
+    { dependencies: [] }
+  );
 
   return (
-    <pixiLayoutContainer
-      layout={{
-        padding: 10,
-        borderWidth: 6,
-        borderColor: palette[2],
-        borderRadius: 8,
-        backgroundColor: palette[3]
-      }}
+    <pixiGraphics
+      ref={ref}
+      draw={(graphics) =>
+        graphics.circle(0, 0, dimension).fill({ color: 0xffffff })
+      }
+      position={position}
+      scale={0}
       filters={[
         new DropShadowFilter({
-          color: 0x000000,
+          offset: { x: 0, y: 5 },
           blur: 4,
-          offset: { x: 0, y: 10 },
-          alpha: 0.25
+          alpha: 0.5
         })
       ]}
-    >
-      <pixiText
-        text={text}
-        layout={{}}
-        style={{
-          fontFamily: 'Grandstander',
-          fontSize: 64,
-          fontWeight: 'bolder',
-          fill: palette[2]
-        }}
-      />
-    </pixiLayoutContainer>
+    />
   );
 };
 
 const Home = () => {
   useExtend({ LayoutContainer });
 
-  const ref = useRef(undefined);
+  const particleSystem = useEntities(world.with('key'));
 
-  const [, fontLoadedFlagSet] = useState(false);
+  const pointerTapCountRef = useRef(-1);
 
-  useEffect(() => {
-    Assets.load({
-      alias: 'Grandstander',
-      src: '/asset/font/Grandstander-VariableFont_wght.ttf',
-      data: { family: 'Grandstander' }
-    }).then(() => fontLoadedFlagSet(true));
-  }, []);
+  /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
+  const onPointerTapHandle = ({ client }) => {
+    const pointerTapIndex = (() => {
+      const { current } = pointerTapCountRef;
 
-  useGSAP(
-    () => {
-      gsap.from(
-        /** @type {pixiJs.Container} */ (ref.current).children.find(
-          ({ children }) => children.length
-        ).children,
-        {
-          pixi: {
-            y: -100,
-            angle: 'random(-80, 80)',
-            alpha: 0
-          },
-          stagger: 0.1,
-          repeat: -1,
-          yoyo: true,
-          repeatDelay: 1,
-          ease: 'back',
-          duration: 1.5
-        }
-      );
-    },
-    { dependencies: [] }
-  );
+      const pointerTapIndex = current + 1;
+
+      Object.assign(pointerTapCountRef, { current: pointerTapIndex });
+
+      return pointerTapIndex;
+    })();
+
+    Array.from({ length: random.int(15, 30) }).map((_, index) => {
+      const dimension = random.int(20, 40);
+
+      world.add({
+        key: `${pointerTapIndex}-${index}`,
+        dimension,
+        position: /** @type {{ x: number; y: number }} */ (
+          Object.entries(client).reduce(
+            (memo, [key, value]) => ({
+              ...memo,
+              [key]: value
+            }),
+            {}
+          )
+        )
+      });
+    });
+  };
 
   return (
     <pixiLayoutContainer
-      ref={ref}
       layout={{
+        position: 'relative',
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 10,
         borderWidth: 1,
         borderColor: 0xff0000,
         backgroundColor: palette[0]
       }}
+      eventMode='static'
+      cursor='pointer'
+      onPointerTap={onPointerTapHandle}
     >
-      {textCollection.map((text, index) => (
-        <LayoutContainer_ key={index} text={text} />
+      {particleSystem.entities.map((entity) => (
+        <LayoutContainer_ key={entity.key} entity={entity} />
       ))}
     </pixiLayoutContainer>
   );
