@@ -1,97 +1,103 @@
-import { useMemo } from 'react';
+import { useRef } from 'react';
 import { useExtend } from '@pixi/react';
 import { useShallow } from 'zustand/react/shallow';
 import { LayoutContainer } from '@pixi/layout/components';
+import * as pixiJs from 'pixi.js';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+import { PixiPlugin } from 'gsap/PixiPlugin';
 
 import useStore from '#/component/useStore';
 
-const delta = 0.1;
+gsap.registerPlugin(useGSAP, PixiPlugin);
+PixiPlugin.registerPIXI(pixiJs);
 
-const length = (Math.PI * 2) / delta;
+const dimension = 50;
 
-const yScale = 200;
+/** @type {(displayDimension: object) => object} */
+const centerCoordinateGet = (displayDimension) =>
+  Object.values(displayDimension).reduce((memo, value, index) => {
+    const key = !index ? 'x' : 'y';
 
-/** @type {(index: number, gridDimension: object) => object} */
-const positionGet = (index, gridDimension) => {
-  return {
-    x: index * gridDimension,
-    y: Math.sin(index * delta) * yScale + yScale
-  };
+    return {
+      ...memo,
+      [key]: (value - dimension) * 0.5
+    };
+  }, {});
+
+/** @type {(frame: number, displayDimension: object) => object} */
+const positionGet = (frame, displayDimension) => {
+  const { x, y } = centerCoordinateGet(displayDimension);
+
+  return Object.entries({ x, y }).reduce((memo, [key, value], index) => {
+    const [operator, _value, __value] = !index
+      ? ['cos', x, 0.01]
+      : ['sin', y, 0.02];
+
+    return {
+      ...memo,
+      [key]: value + Math[operator](frame * __value) * _value
+    };
+  }, {});
 };
 
-const LayoutContainer__ = ({ index, gridDimension }) => {
+const LayoutContainer_ = ({ displayDimension }) => {
   useExtend({ LayoutContainer });
+
+  const ref = useRef(undefined);
+
+  useGSAP(
+    () => {
+      /** @type {(_: number, __: number, frame: number) => void} */
+      const fn = (_, __, frame) => {
+        Object.assign(
+          ref.current,
+          /** @type {pixiJs.ContainerOptions} */ ({
+            position: positionGet(frame, displayDimension)
+          })
+        );
+      };
+
+      gsap.ticker.add(fn);
+
+      return () => gsap.ticker.remove(fn);
+    },
+    { dependencies: [] }
+  );
 
   return (
     <pixiLayoutContainer
+      ref={ref}
       layout={{
-        width: gridDimension,
-        height: gridDimension,
         position: 'absolute',
-        borderWidth: 1,
-        borderColor: 0xffffff
-      }}
-      position={positionGet(index, gridDimension)}
-    ></pixiLayoutContainer>
-  );
-};
-
-const LayoutContainer_ = () => {
-  useExtend({ LayoutContainer });
-
-  const { displayDimension } = useStore(
-    useShallow(
-      ({
-        displayDefinition: {
-          widthMaximum,
-          dimension: { width }
-        }
-      }) => ({
-        displayDimension: Math.min(widthMaximum, width)
-      })
-    )
-  );
-
-  const gridDimension = useMemo(
-    () => displayDimension / length,
-    [displayDimension]
-  );
-
-  return (
-    <pixiLayoutContainer
-      layout={{
-        position: 'relative',
-        width: displayDimension,
-        height: yScale * 2 + gridDimension,
+        width: dimension,
+        height: dimension,
         borderWidth: 1,
         borderColor: 0x00ff00
       }}
-    >
-      {Array.from({ length }).map((_, index) => (
-        <LayoutContainer__
-          key={index}
-          index={index}
-          gridDimension={gridDimension}
-        />
-      ))}
-    </pixiLayoutContainer>
+    ></pixiLayoutContainer>
   );
 };
 
 const Home = () => {
   useExtend({ LayoutContainer });
 
+  const { displayDimension } = useStore(
+    useShallow(({ displayDefinition: { dimension } }) => ({
+      displayDimension: dimension
+    }))
+  );
+
   return (
     <pixiLayoutContainer
       layout={{
+        position: 'relative',
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
+        borderWidth: 0,
         borderColor: 0xff0000
       }}
     >
-      <LayoutContainer_ />
+      <LayoutContainer_ displayDimension={displayDimension} />
     </pixiLayoutContainer>
   );
 };
