@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Application, useExtend, useApplication } from '@pixi/react';
 import { useShallow } from 'zustand/react/shallow';
 import * as pixiLayout from '@pixi/layout';
@@ -44,25 +44,36 @@ const Application_ = ({ children }) => {
     }))
   );
 
+  const [initializedFlag, initializedFlagSet] = useState(false);
+
   return (
     <Application
       resizeTo={window}
       useBackBuffer
       antialias
       onInit={({ stage }) =>
-        Object.assign(
-          stage,
-          /** @type {pixiJs.ContainerOptions} */ ({
-            layout: /** @type {pixiLayout.LayoutOptions} */ (displayDimension)
-          })
-        )
+        !initializedFlag &&
+        (() => {
+          Object.assign(
+            stage,
+            /** @type {pixiJs.ContainerOptions} */ ({
+              layout: /** @type {pixiLayout.LayoutOptions} */ (displayDimension)
+            })
+          );
+
+          initializedFlagSet(true);
+        })()
       }
     >
-      <Stats_ />
+      {initializedFlag && (
+        <>
+          <Stats_ />
 
-      <LayoutContainer_ displayDimension={displayDimension}>
-        {children}
-      </LayoutContainer_>
+          <LayoutContainer_ displayDimension={displayDimension}>
+            {children}
+          </LayoutContainer_>
+        </>
+      )}
     </Application>
   );
 };
