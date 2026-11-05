@@ -1,117 +1,61 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useExtend } from '@pixi/react';
-import { useShallow } from 'zustand/react/shallow';
 import { LayoutContainer } from '@pixi/layout/components';
-import { Assets, BitmapFont, BitmapText } from 'pixi.js';
-import random from 'random';
-import alea from 'alea';
-import { createNoise2D } from 'simplex-noise';
+import * as pixiJs from 'pixi.js';
+import { Assets, Text } from 'pixi.js';
+import { DropShadowFilter } from 'pixi-filters';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+import { PixiPlugin } from 'gsap/PixiPlugin';
 import niceColorPalettes from 'nice-color-palettes';
+import random from 'random';
 
-import useStore from '#/component/useStore';
+gsap.registerPlugin(useGSAP, PixiPlugin);
+PixiPlugin.registerPIXI(pixiJs);
 
-const seed = -1;
+const textCollection = ['PixiJS', '&', 'GSAP', '💚'];
 
-random.use(seed);
+const palette = niceColorPalettes[0];
 
-const noiseGet = createNoise2D(alea(seed));
-
-const Entity = ({ entity: { dimension, position, rotation, color } }) => {
-  useExtend({ LayoutContainer, BitmapText });
-
-  return (
-    <pixiBitmapText
-      text='='
-      style={{
-        fontFamily: '_Grandstander',
-        fontSize: Math.max(24, dimension * 3),
-        fill: color
-      }}
-      position={position}
-      rotation={rotation}
-    />
-  );
-};
-
-const LayoutContainer_ = () => {
-  useExtend({ LayoutContainer });
-
-  const { displayDimension } = useStore(
-    useShallow(
-      ({
-        displayDefinition: {
-          widthMaximum,
-          dimension: { width }
-        }
-      }) => ({
-        displayDimension: Math.min(widthMaximum, width)
-      })
-    )
-  );
-
-  const entityCollection = useMemo(() => {
-    const rowColumnCount = 50;
-
-    const gridDimension = displayDimension / rowColumnCount;
-
-    const palette = random.choice(niceColorPalettes);
-
-    return Array.from({ length: rowColumnCount ** 2 })
-      .map((_, index) => {
-        const [x, y] = [
-          index % rowColumnCount,
-          Math.floor(index / rowColumnCount)
-        ];
-
-        const noise =
-          noiseGet(
-            .../** @type {[number, number]} */ (
-              [x, y].map((value) => value * 0.05)
-            )
-          ) *
-            0.5 +
-          0.5;
-
-        const dimension = noise * gridDimension;
-
-        return {
-          dimension,
-          position: Object.entries({ x, y }).reduce(
-            (memo, [key, value]) => ({
-              ...memo,
-              [key]: value * gridDimension + (gridDimension - dimension) * 0.5
-            }),
-            {}
-          ),
-          rotation: noise * (Math.PI * 2),
-          color:
-            palette[
-              Math.min(Math.floor(noise * palette.length), palette.length - 1)
-            ]
-        };
-      })
-      .filter(() => random.boolean());
-  }, [displayDimension]);
+const LayoutContainer_ = ({ text }) => {
+  useExtend({ LayoutContainer, Text });
 
   return (
     <pixiLayoutContainer
       layout={{
-        position: 'relative',
-        width: displayDimension,
-        height: displayDimension,
-        borderWidth: 1,
-        borderColor: 0x00ff00
+        padding: 10,
+        borderWidth: 4,
+        borderColor: 0xffffff,
+        borderRadius: 8,
+        backgroundColor: palette[3]
       }}
+      filters={[
+        new DropShadowFilter({
+          offset: { x: 0, y: 5 },
+          blur: 4,
+          alpha: 0.5,
+          antialias: true
+        })
+      ]}
     >
-      {entityCollection.map((entity, index) => (
-        <Entity key={index} entity={entity} />
-      ))}
+      <pixiText
+        text={text}
+        layout={{}}
+        style={{
+          fontFamily: 'Grandstander',
+          fontSize: 64,
+          fontWeight: 'bolder',
+          fill: 0xffffff
+        }}
+      />
     </pixiLayoutContainer>
   );
 };
 
 const Home = () => {
   useExtend({ LayoutContainer });
+
+  const ref = useRef(undefined);
 
   const [fontLoadedFlag, fontLoadedFlagSet] = useState(false);
 
@@ -120,33 +64,51 @@ const Home = () => {
       alias: 'Grandstander',
       src: '/asset/font/Grandstander-VariableFont_wght.ttf',
       data: { family: 'Grandstander' }
-    })
-      .then(() => {
-        return BitmapFont.install({
-          name: '_Grandstander',
-          style: {
-            fontFamily: 'Grandstander',
-            fontSize: 64,
-            fontWeight: 'lighter',
-            fill: 0xffffff
-          }
-        });
-      })
-      .then(() => fontLoadedFlagSet(true));
+    }).then(() => fontLoadedFlagSet(true));
   }, []);
+
+  useGSAP(
+    () => {
+      fontLoadedFlag &&
+        gsap.from(
+          /** @type {pixiJs.Container} */ (ref.current).children.find(
+            ({ children }) => children.length
+          ).children,
+          {
+            pixi: {
+              y: -100,
+              angle: random.int(-80, 80),
+              alpha: 0
+            },
+            duration: 1,
+            stagger: 0.1,
+            ease: 'back',
+            repeat: -1,
+            yoyo: true,
+            repeatDelay: 1
+          }
+        );
+    },
+    { dependencies: [fontLoadedFlag] }
+  );
 
   return (
     fontLoadedFlag && (
       <pixiLayoutContainer
+        ref={ref}
         layout={{
           flex: 1,
           justifyContent: 'center',
           alignItems: 'center',
+          gap: 10,
           borderWidth: 1,
-          borderColor: 0xff0000
+          borderColor: 0xff0000,
+          backgroundColor: palette[0]
         }}
       >
-        <LayoutContainer_ />
+        {textCollection.map((text, index) => (
+          <LayoutContainer_ key={index} text={text} />
+        ))}
       </pixiLayoutContainer>
     )
   );
