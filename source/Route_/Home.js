@@ -1,73 +1,196 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useExtend } from '@pixi/react';
+import { useShallow } from 'zustand/react/shallow';
 import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
-import { Assets, Texture, Sprite } from 'pixi.js';
+import { Assets, Texture, Sprite, Text } from 'pixi.js';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+import { PixiPlugin } from 'gsap/PixiPlugin';
+import 'pixi.js/advanced-blend-modes';
 
-/** @type {[string, string[]][]} */
-const bundleDefinitionCollection = [
-  ['start-screen', ['flowerTop']],
-  ['game-screen', ['eggHead']]
-];
+import useStore from '#/component/useStore';
 
-const Sprite_ = () => {
-  useExtend({ LayoutContainer, Sprite });
+gsap.registerPlugin(useGSAP, PixiPlugin);
+PixiPlugin.registerPIXI(pixiJs);
 
-  const [bundleDefinitionIndex, bundleDefinitionIndexSet] = useState(0);
+const LayoutContainer__ = ({ index, gridDimension }) => {
+  const blendMode = /** @type {pixiJs.BLEND_MODES} */ (
+    [
+      'normal',
+      'add',
+      'screen',
+      'darken',
+      'lighten',
+      'color-dodge',
+      'color-burn',
+      'linear-burn',
+      'linear-dodge',
+      'linear-light',
+      'hard-light',
+      'soft-light',
+      'pin-light',
+      'difference',
+      'exclusion',
+      'overlay',
+      'saturation',
+      'color',
+      'luminosity',
+      'add-npm',
+      'subtract',
+      'divide',
+      'vivid-light',
+      'hard-mix',
+      'negation'
+    ][index]
+  );
 
-  const [texture, textureSet] = useState(Texture.EMPTY);
+  useExtend({ LayoutContainer, Sprite, Text });
+
+  const { displayScaleFactor } = useStore(
+    useShallow(({ displayDefinition: { scaleFactor } }) => ({
+      displayScaleFactor: scaleFactor
+    }))
+  );
+
+  const ref = useRef(undefined);
+
+  const [textureCollection, textureCollectionSet] = useState(
+    Array.from({ length: 2 }).map(() => Texture.EMPTY)
+  );
 
   useEffect(() => {
-    Assets.init({
-      manifest: {
-        bundles: bundleDefinitionCollection.map(
-          ([name, assetAliasCollection]) => ({
-            name,
-            assets: assetAliasCollection.map(
-              (alias) =>
-                /** @type {pixiJs.UnresolvedAsset} */ ({
-                  alias,
-                  src: `/asset/image/${alias}.png`
-                })
-            )
-          })
-        )
-      }
-    });
+    const assetAliasCollection = ['panda', 'rainbow-gradient'];
 
-    Assets.backgroundLoadBundle(
-      bundleDefinitionCollection.map(([name]) => name)
+    Assets.load(
+      assetAliasCollection.map((alias) => ({
+        alias,
+        src: `/asset/image/${alias}.png`
+      }))
+    ).then((assetObject) =>
+      textureCollectionSet(
+        assetAliasCollection.map((alias) => assetObject[alias])
+      )
     );
   }, []);
 
-  useEffect(() => {
-    const [name, assetAliasCollection] =
-      bundleDefinitionCollection[bundleDefinitionIndex];
-
-    Assets.loadBundle(name)
-      .then((bundleObject) =>
-        assetAliasCollection.map((alias) => bundleObject[alias])
-      )
-      .then(([texture]) => textureSet(texture));
-  }, [bundleDefinitionIndex]);
+  useGSAP(
+    () => {
+      gsap.to(/** @type {pixiJs.Container} */ (ref.current).getChildAt(0), {
+        pixi: { angle: 360 },
+        duration: 10,
+        repeat: -1,
+        ease: 'none'
+      });
+    },
+    { dependencies: [] }
+  );
 
   return (
     <pixiLayoutContainer
+      ref={ref}
       layout={{
-        padding: 10,
+        position: 'relative',
+        width: gridDimension,
+        height: gridDimension,
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         borderWidth: 1,
-        borderColor: 0x00ff00
+        borderColor: 0x000000,
+        backgroundColor: 0xffffff
       }}
-      eventMode='static'
-      cursor='pointer'
-      onPointerTap={() =>
-        bundleDefinitionIndexSet((bundleDefinitionIndex) =>
-          Number(!bundleDefinitionIndex)
-        )
-      }
     >
-      <pixiSprite texture={texture} layout={{}} />
+      <pixiSprite
+        texture={textureCollection[0]}
+        layout={{
+          width: gridDimension * 0.75,
+          objectFit: 'contain'
+        }}
+      />
+
+      <pixiSprite
+        texture={textureCollection[1]}
+        layout={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%'
+        }}
+        blendMode={blendMode}
+      />
+
+      <pixiLayoutContainer
+        layout={{
+          justifyContent: 'center',
+          alignItems: 'center',
+          marginBottom: 5,
+          padding: 10 * displayScaleFactor,
+          borderWidth: 1,
+          borderColor: 0x00000,
+          borderRadius: 4
+        }}
+      >
+        <pixiText
+          text={blendMode}
+          layout={{}}
+          style={{
+            fontFamily: 'ShortStack',
+            fontSize: 12 * displayScaleFactor,
+            fontWeight: 'bolder',
+            fill: 0x00000
+          }}
+        />
+      </pixiLayoutContainer>
     </pixiLayoutContainer>
+  );
+};
+
+const LayoutContainer_ = () => {
+  useExtend({ LayoutContainer });
+
+  const { displayDimension } = useStore(
+    useShallow(
+      ({
+        displayDefinition: {
+          widthMaximum,
+          dimension: { width }
+        }
+      }) => ({
+        displayDimension: Math.min(widthMaximum, width)
+      })
+    )
+  );
+
+  const [fontLoadedFlag, fontLoadedFlagSet] = useState(false);
+
+  useEffect(() => {
+    Assets.load({
+      alias: 'ShortStack',
+      src: '/asset/font/ShortStack-Regular.ttf',
+      data: { family: 'ShortStack' }
+    }).then(() => fontLoadedFlagSet(true));
+  }, []);
+
+  return (
+    fontLoadedFlag && (
+      <pixiLayoutContainer
+        layout={{
+          width: displayDimension,
+          height: displayDimension,
+          flexWrap: 'wrap',
+          borderWidth: 0,
+          borderColor: 0x00ff00
+        }}
+      >
+        {Array.from({ length: 5 ** 2 }).map((_, index, collection) => (
+          <LayoutContainer__
+            key={index}
+            index={index}
+            gridDimension={displayDimension / collection.length ** 0.5}
+          />
+        ))}
+      </pixiLayoutContainer>
+    )
   );
 };
 
@@ -80,11 +203,11 @@ const Home = () => {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1,
+        borderWidth: 0,
         borderColor: 0xff0000
       }}
     >
-      <Sprite_ />
+      <LayoutContainer_ />
     </pixiLayoutContainer>
   );
 };
