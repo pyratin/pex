@@ -4,37 +4,61 @@ import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
 import { Assets, Texture, Sprite } from 'pixi.js';
 
-const assetAliasCollection = ['flowerTop', 'eggHead'];
+/** @type {[string, string[]][]} */
+const bundleDefinitionCollection = [
+  ['start-screen', ['flowerTop']],
+  ['game-screen', ['eggHead']]
+];
 
 const LayoutContainer_ = () => {
   useExtend({ LayoutContainer, Sprite });
 
-  const [assetAliasIndex, assetAliasIndexSet] = useState(0);
+  const [bundleDefinitionIndex, bundleDefinitionIndexSet] = useState(0);
 
   const [texture, textureSet] = useState(Texture.EMPTY);
 
   useEffect(() => {
-    Assets.add(
-      assetAliasCollection.map((alias) => ({
-        alias,
-        src: `/asset/image/${alias}.png`
-      }))
-    );
+    Assets.init({
+      manifest: {
+        bundles: bundleDefinitionCollection.map(
+          ([name, assetAliasCollection]) => ({
+            name,
+            assets: assetAliasCollection.map((alias) => ({
+              alias,
+              src: `/asset/image/${alias}.png`
+            }))
+          })
+        )
+      }
+    });
 
-    Assets.backgroundLoad(assetAliasCollection);
+    Assets.backgroundLoadBundle(
+      bundleDefinitionCollection.map(([name]) => name)
+    );
   }, []);
 
   useEffect(() => {
-    Assets.load(assetAliasCollection[assetAliasIndex]).then(textureSet);
-  }, [assetAliasIndex]);
+    const [name, assetAliasCollection] =
+      bundleDefinitionCollection[bundleDefinitionIndex];
+
+    Assets.loadBundle(name)
+      .then((bundleObject) =>
+        assetAliasCollection.map((alias) => bundleObject[alias])
+      )
+      .then(([texture]) => textureSet(texture));
+  }, [bundleDefinitionIndex]);
 
   /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
-  const onPointerTapHandle = () =>
-    assetAliasIndexSet((assetAliasIndex) => Number(!assetAliasIndex));
+  const onPointerTapHandle = () => {
+    bundleDefinitionIndexSet((bundleDefinitionIndex) =>
+      Number(!bundleDefinitionIndex)
+    );
+  };
 
   return (
     <pixiLayoutContainer
       layout={{
+        padding: 10,
         borderWidth: 1,
         borderColor: 0x00ff00
       }}
