@@ -1,27 +1,36 @@
 import { useRef, useState, useEffect } from 'react';
-import { useExtend, useApplication } from '@pixi/react';
+import { useExtend } from '@pixi/react';
 import { useShallow } from 'zustand/react/shallow';
 import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
-import {
-  Assets,
-  Texture,
-  Graphics,
-  BlurFilter,
-  Rectangle,
-  Sprite
-} from 'pixi.js';
+import { Assets, Texture, Sprite, Rectangle } from 'pixi.js';
+import { useGSAP } from '@gsap/react';
+import gsap from 'gsap';
+import { PixiPlugin } from 'gsap/PixiPlugin';
+import _ from 'lodash';
+
+gsap.registerPlugin(useGSAP, PixiPlugin);
+PixiPlugin.registerPIXI(pixiJs);
 
 import useStore from '#/component/useStore';
 
-const radius = 90;
+const rectangleGet = _.memoize(
+  ({ width, height }, { width: _width, height: _height }) => {
+    const padding = Math.max(width, height);
 
-const blurStrength = 10;
+    return new Rectangle(
+      -padding,
+      -padding,
+      _width + padding * 2,
+      _height + padding * 2
+    );
+  },
+  ({ width, height }, { width: _width, height: _height }) =>
+    `${width}-${height}--${_width}-${_height}`
+);
 
-const dimension = (radius + blurStrength) * 2;
-
-const Sprite_ = () => {
-  useExtend({ Sprite });
+const LayoutContainer_ = () => {
+  useExtend({ LayoutContainer, Sprite });
 
   const { displayDimension } = useStore(
     useShallow(({ displayDefinition: { dimension } }) => ({
@@ -29,72 +38,119 @@ const Sprite_ = () => {
     }))
   );
 
-  const [texture, textureSet] = useState(Texture.EMPTY);
-
-  useEffect(() => {
-    Assets.load('/asset/image/bg_grass.jpg').then(textureSet);
-  }, []);
-
-  return <pixiSprite texture={texture} {...displayDimension} />;
-};
-
-const LayoutContainer_ = () => {
-  useExtend({ LayoutContainer, Graphics, Sprite });
-
-  const {
-    app: { renderer }
-  } = useApplication();
-
   const ref = useRef(undefined);
 
   const [texture, textureSet] = useState(Texture.EMPTY);
 
   useEffect(() => {
-    const refCurrentGraphics = /** @type {pixiJs.Container} */ (
-      ref.current
-    ).getChildAt(0);
+    Assets.load('/asset/image/eggHead.png').then(textureSet);
+  }, []);
 
-    textureSet(
-      renderer.generateTexture({
-        target: refCurrentGraphics,
-        frame: new Rectangle(0, 0, dimension, dimension)
-      })
-    );
+  useGSAP(
+    () => {
+      const refCurrent = /** @type {pixiJs.Container} */ (ref.current);
 
-    Object.assign(
-      refCurrentGraphics,
-      /** @type {pixiJs.GraphicsOptions} */ ({
-        visible: false
-      })
-    );
-  }, [renderer]);
+      const rotationDelta = Math.random() * 0.005;
+
+      const speed = Math.random() * 2 + 2;
+
+      const fn = () => {
+        const rotation = (() => {
+          const { rotation } = refCurrent;
+
+          return rotation + rotationDelta;
+        })();
+
+        const position = (() => {
+          const position = (() => {
+            const {
+              position: { x, y }
+            } = refCurrent;
+
+            return /** @type {{ x: number; y: number }} */ (
+              Object.entries({ x, y }).reduce((memo, [key, value], index) => {
+                const operator = !index ? 'cos' : 'sin';
+
+                return {
+                  ...memo,
+                  [key]: value + Math[operator](rotation) * speed
+                };
+              }, {})
+            );
+          })();
+
+          const rectangle = rectangleGet(texture, displayDimension);
+
+          return {
+            ...position,
+            ...(() => {
+              switch (true) {
+                case position.x < rectangle.x:
+                  return { x: position.x + rectangle.width };
+
+                case position.x > rectangle.x + rectangle.width:
+                  return { x: position.x - rectangle.width };
+
+                case position.y < rectangle.y:
+                  return { y: position.y + rectangle.height };
+
+                case position.y > rectangle.y + rectangle.height:
+                  return { y: position.y - rectangle.height };
+              }
+            })()
+          };
+        })();
+
+        Object.assign(
+          refCurrent,
+          /** @type {pixiJs.ContainerOptions} */ ({
+            position,
+            rotation
+          })
+        );
+      };
+
+      texture !== Texture.EMPTY && gsap.ticker.add(fn);
+
+      return () => gsap.ticker.remove(fn);
+    },
+    { dependencies: [texture] }
+  );
 
   return (
     <pixiLayoutContainer
       ref={ref}
       layout={{
-        width: dimension,
-        height: dimension,
+        position: 'absolute',
         borderWidth: 0,
         borderColor: 0x00ff00
       }}
+      position={(() => {
+        const { width, height } = displayDimension;
+
+        const { width: _width, height: _height } = texture;
+
+        return /** @type {{ x: number; y: number }} */ (
+          Object.entries({
+            x: width - _width,
+            y: height - _height
+          }).reduce(
+            (memo, [key, value]) => ({
+              ...memo,
+              [key]: Math.random() * value
+            }),
+            {}
+          )
+        );
+      })()}
+      rotation={(() => Math.random() * (Math.PI * 2))()}
     >
-      <pixiGraphics
-        draw={(graphics) =>
-          graphics
-            .circle(
-              ...(() => {
-                const _dimension = dimension * 0.5;
-
-                return /** @type {const} */ ([_dimension, _dimension, radius]);
-              })()
-            )
-            .fill({ color: 0xffffff })
-        }
-        filters={[new BlurFilter({ strength: blurStrength })]}
+      <pixiSprite
+        texture={texture}
+        layout={{}}
+        rotation={Math.PI * 0.5}
+        tint={(() => Math.random() * 0xffffff)()}
       />
-
-      <pixiSprite texture={texture} />
     </pixiLayoutContainer>
   );
 };
@@ -102,61 +158,18 @@ const LayoutContainer_ = () => {
 const Home = () => {
   useExtend({ LayoutContainer });
 
-  const ref = useRef(undefined);
-
-  useEffect(() => {
-    const refCurrent = /** @type {pixiJs.Container} */ (ref.current);
-
-    refCurrent.getChildAt(0).setMask({
-      mask: refCurrent.getChildAt(1).getChildAt(1)
-    });
-  }, []);
-
-  /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
-  const onPointerMoveHandle = ({ client, currentTarget }) => {
-    const element = currentTarget.getChildAt(1);
-
-    Object.assign(
-      element,
-      /** @type {pixiJs.ContainerOptions} */ ({
-        position: (() => {
-          const { x, y } = client;
-
-          return Object.entries({ x, y }).reduce(
-            (memo, [key, value], index) => {
-              const _value = (() => {
-                const { width, height } = element;
-
-                return !index ? width : height;
-              })();
-
-              return {
-                ...memo,
-                [key]: value - _value * 0.5
-              };
-            },
-            {}
-          );
-        })()
-      })
-    );
-  };
-
   return (
     <pixiLayoutContainer
-      ref={ref}
       layout={{
+        position: 'relative',
         flex: 1,
-        borderWidth: 1,
+        borderWidth: 0,
         borderColor: 0xff0000
       }}
-      eventMode='static'
-      cursor='pointer'
-      onPointerMove={onPointerMoveHandle}
     >
-      <Sprite_ />
-
-      <LayoutContainer_ />
+      {Array.from({ length: 20 }).map((_, index) => (
+        <LayoutContainer_ key={index} />
+      ))}
     </pixiLayoutContainer>
   );
 };
