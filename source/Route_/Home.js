@@ -1,33 +1,11 @@
 import { useRef, useState, useEffect } from 'react';
 import { useExtend, useApplication } from '@pixi/react';
-import { useShallow } from 'zustand/react/shallow';
 import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
-import { Assets, Texture, Sprite } from 'pixi.js';
+import { Assets, Texture, Sprite, Graphics } from 'pixi.js';
 
-import useStore from '#/component/useStore';
-
-const dragDefinitionInitial = {
-  pointerId: undefined,
-  offset: { x: undefined, y: undefined }
-};
-
-const LayoutContainer_ = () => {
+const Sprite_ = ({ scaleFactor }) => {
   useExtend({ LayoutContainer, Sprite });
-
-  const {
-    app: { stage, screen }
-  } = useApplication();
-
-  const { displayDimension } = useStore(
-    useShallow(({ displayDefinition: { dimension } }) => ({
-      displayDimension: dimension
-    }))
-  );
-
-  const ref = useRef(undefined);
-
-  const dragDefinitionRef = useRef(dragDefinitionInitial);
 
   const [texture, textureSet] = useState(Texture.EMPTY);
 
@@ -47,6 +25,57 @@ const LayoutContainer_ = () => {
     });
   }, []);
 
+  return (
+    <pixiLayoutContainer
+      layout={{
+        borderWidth: 0,
+        borderColor: 0x00ff00
+      }}
+    >
+      <pixiSprite
+        texture={texture}
+        layout={{
+          ...(() => {
+            const { width, height } = texture;
+
+            return Object.entries({ width, height }).reduce(
+              (memo, [key, value]) => ({
+                ...memo,
+                [key]: (scaleFactor + 1) * value + value
+              }),
+              {}
+            );
+          })()
+        }}
+      />
+    </pixiLayoutContainer>
+  );
+};
+
+const dimension = (() => {
+  const height = 26;
+
+  return { width: height * (height * 0.5), height };
+})();
+
+const graphicStrokeWidth = 2;
+
+const dragDefinitionInitial = {
+  pointerId: undefined,
+  offset: { x: undefined, y: undefined }
+};
+
+const Control = ({ scaleFactorSet }) => {
+  useExtend({ LayoutContainer, Graphics });
+
+  const {
+    app: { stage, screen }
+  } = useApplication();
+
+  const ref = useRef(undefined);
+
+  const dragDefinitionRef = useRef(dragDefinitionInitial);
+
   useEffect(() => {
     Object.assign(
       stage,
@@ -57,6 +86,19 @@ const LayoutContainer_ = () => {
     );
   }, [stage, screen]);
 
+  useEffect(() => {
+    Object.assign(
+      /** @type {pixiJs.Container} */ (ref.current).getChildAt(1),
+      /** @type {pixiJs.ContainerOptions} */ ({
+        position: (() => {
+          const { width, height } = dimension;
+
+          return { x: (width - height) * 0.5, y: 0 };
+        })()
+      })
+    );
+  }, []);
+
   /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
   const onPointerMoveHandle = ({ pointerId, global }) => {
     const {
@@ -65,17 +107,29 @@ const LayoutContainer_ = () => {
 
     pointerId === _pointerId &&
       (() => {
-        const refCurrent = /** @type {pixiJs.Container} */ (ref.current);
+        const element = /** @type {pixiJs.Container} */ (
+          ref.current
+        ).getChildAt(1);
 
         Object.assign(
-          refCurrent,
+          element,
           /** @type {pixiJs.ContainerOptions} */ ({
             position: (() => {
-              const { x, y } = global;
+              const _x = (() => {
+                const { x } = element.parent.toLocal(global);
 
-              const { x: _x, y: _y } = offset;
+                const { x: _x } = offset;
 
-              return { x: x + _x, y: y + _y };
+                return x + _x;
+              })();
+
+              const { width, height } = dimension;
+
+              const x = Math.max(0, Math.min(_x, width - height));
+
+              scaleFactorSet((x / (width - height) - 0.5) * 2);
+
+              return { x, y: 0 };
             })()
           })
         );
@@ -92,7 +146,7 @@ const LayoutContainer_ = () => {
             position: { x, y }
           } = currentTarget;
 
-          const { x: _x, y: _y } = global;
+          const { x: _x, y: _y } = currentTarget.parent.toLocal(global);
 
           return { x: x - _x, y: y - _y };
         })()
@@ -100,17 +154,10 @@ const LayoutContainer_ = () => {
     });
 
     stage.on('pointermove', onPointerMoveHandle);
-
-    Object.assign(
-      currentTarget,
-      /** @type {pixiJs.ContainerOptions} */ ({
-        alpha: 0.75
-      })
-    );
   };
 
   /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
-  const onPointerUpHandle = ({ pointerId, currentTarget }) => {
+  const onPointerUpHandle = ({ pointerId }) => {
     const {
       current: { pointerId: _pointerId }
     } = dragDefinitionRef;
@@ -120,13 +167,6 @@ const LayoutContainer_ = () => {
         Object.assign(dragDefinitionRef, { current: dragDefinitionInitial });
 
         stage.off('pointermove', onPointerMoveHandle);
-
-        Object.assign(
-          currentTarget,
-          /** @type {pixiJs.ContainerOptions} */ ({
-            alpha: 1
-          })
-        );
       })();
   };
 
@@ -134,35 +174,60 @@ const LayoutContainer_ = () => {
     <pixiLayoutContainer
       ref={ref}
       layout={{
-        position: 'absolute',
-        borderWidth: 1,
+        ...dimension,
+        borderWidth: 0,
         borderColor: 0x00ff00
       }}
-      position={(() => {
-        const { width, height } = displayDimension;
-
-        const { width: _width, height: _height } = texture;
-
-        return /** @type {{ x: number; y: number }} */ (
-          Object.entries({
-            x: width - _width,
-            y: height - _height
-          }).reduce(
-            (memo, [key, value]) => ({
-              ...memo,
-              [key]: Math.random() * value
-            }),
-            {}
-          )
-        );
-      })()}
-      eventMode='static'
-      cursor='pointer'
-      onPointerDown={onPointerDownHandle}
-      onPointerUp={onPointerUpHandle}
-      onPointerUpOutside={onPointerUpHandle}
     >
-      <pixiSprite texture={texture} layout={{}} />
+      <pixiGraphics
+        draw={(graphics) =>
+          graphics
+            .rect(
+              ...(() => {
+                const { width, height } = dimension;
+
+                return /** @type {const} */ ([0, 0, width, height]);
+              })()
+            )
+            .stroke({
+              width: graphicStrokeWidth,
+              color: 0xffffff,
+              alignment: 1
+            })
+        }
+      />
+
+      <pixiGraphics
+        draw={(graphics) =>
+          graphics
+            .rect(
+              ...(() => {
+                const { height } = dimension;
+
+                const _height = height - graphicStrokeWidth * 2;
+
+                return /** @type {const} */ ([
+                  graphicStrokeWidth,
+                  graphicStrokeWidth,
+                  _height,
+                  _height
+                ]);
+              })()
+            )
+            .fill({ color: 0xffffff })
+            .stroke({
+              width: 1,
+              color: 0x000000,
+              alignment: 1
+            })
+        }
+        alpha={0.75}
+        eventMode='static'
+        cursor='pointer'
+        onPointerDown={onPointerDownHandle}
+        onPointerUp={onPointerUpHandle}
+        onPointerUpOutside={onPointerUpHandle}
+      />
     </pixiLayoutContainer>
   );
 };
@@ -170,17 +235,24 @@ const LayoutContainer_ = () => {
 const Home = () => {
   useExtend({ LayoutContainer });
 
+  const [scaleFactor, scaleFactorSet] = useState(0);
+
   return (
     <pixiLayoutContainer
       layout={{
         flex: 1,
-        borderWidth: 1,
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 20,
+        marginBottom: '25%',
+        borderWidth: 0,
         borderColor: 0xff0000
       }}
     >
-      {Array.from({ length: 10 }).map((_, index) => (
-        <LayoutContainer_ key={index} />
-      ))}
+      <Sprite_ scaleFactor={scaleFactor} />
+
+      <Control scaleFactorSet={scaleFactorSet} />
     </pixiLayoutContainer>
   );
 };
