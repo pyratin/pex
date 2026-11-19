@@ -1,246 +1,182 @@
-import { useRef, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useExtend } from '@pixi/react';
 import { useShallow } from 'zustand/react/shallow';
 import { LayoutContainer } from '@pixi/layout/components';
-import * as pixiJs from 'pixi.js';
-import { Graphics } from 'pixi.js';
-import { World } from 'miniplex';
-import { useEntities } from 'miniplex-react';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import { PixiPlugin } from 'gsap/PixiPlugin';
-import { uid } from 'uid';
+import { Assets, BitmapFont, BitmapText } from 'pixi.js';
 import random from 'random';
+import alea from 'alea';
+import { createNoise2D } from 'simplex-noise';
 import niceColorPalettes from 'nice-color-palettes';
 
 import useStore from '#/component/useStore';
 
-gsap.registerPlugin(useGSAP, PixiPlugin);
-PixiPlugin.registerPIXI(pixiJs);
+const seed = Math.random();
 
-/** @typedef {{ x: number; y: number }} vectorType */
+random.use(seed);
+
+const noiseGet = createNoise2D(alea(seed));
 
 /**
- * @typedef {{
- *   key: string;
- *   dimension: number;
- *   position: vectorType;
- *   velocity: vectorType;
- *   acceleration: vectorType;
- *   age: number;
- *   ageInitial: number;
- *   color: string;
- * }} particleEntityType
+ * @type {(
+ *   _position: object,
+ *   dimension: number,
+ *   gridDimension: number
+ * ) => object}
  */
+const positionGet = (positionNormalized, dimension, gridDimension) => {
+  return Object.values(positionNormalized).reduce((memo, value, index) => {
+    const key = !index ? 'x' : 'y';
 
-/** @type {World<particleEntityType>} */
-const world = new World();
+    return {
+      ...memo,
+      [key]: value * gridDimension + (gridDimension - dimension) * 0.5
+    };
+  }, {});
+};
 
-const ParticleEntity = ({ particleEntity }) => {
-  const { dimension, color, position } = particleEntity;
+/** @type {(displayDimension: object) => object[]} */
+const entityCollectionGet = (displayDimension) => {
+  const rowColumnCount = 50;
 
-  useExtend({ LayoutContainer, Graphics });
+  const gridDimension = displayDimension / rowColumnCount;
 
-  const ref = useRef(undefined);
+  const palette = random.choice(niceColorPalettes);
 
-  useGSAP(
-    () => {
-      const fn = () => {
-        const { position, velocity, acceleration, age, ageInitial } =
-          particleEntity;
+  return Array.from({ length: rowColumnCount ** 2 })
+    .map((_, index) => {
+      const positionNormalized = [
+        index % rowColumnCount,
+        Math.floor(index / rowColumnCount)
+      ];
 
-        const _age = age - 1;
+      const noise =
+        noiseGet(
+          .../** @type {[number, number]} */ (
+            Object.values(positionNormalized).map((value) => value * 0.05)
+          )
+        ) *
+          0.5 +
+        0.5;
 
-        const refCurrent = /** @type {pixiJs.Container} */ (ref.current);
+      const dimension = noise * gridDimension;
 
-        _age
-          ? refCurrent &&
-            (() => {
-              const _velocity = (() => {
-                const { x, y } = velocity;
-
-                const { x: _x, y: _y } = acceleration;
-
-                return { x: x + _x, y: y + _y };
-              })();
-
-              const _position = (() => {
-                const { x, y } = position;
-
-                const { x: _x, y: _y } = _velocity;
-
-                return { x: x + _x, y: y + _y };
-              })();
-
-              Object.assign(
-                particleEntity,
-                /** @type {particleEntityType} */ ({
-                  position: _position,
-                  velocity: _velocity,
-                  age: _age
-                })
-              );
-
-              const ageNormalized = _age / ageInitial;
-
-              Object.assign(
-                refCurrent,
-                /** @type {pixiJs.ContainerOptions} */ ({
-                  position: _position,
-                  rotation: (() => {
-                    const { x, y } = _velocity;
-
-                    return Math.atan2(y, x) + Math.PI * 0.5;
-                  })(),
-                  scale: ageNormalized,
-                  alpha: ageNormalized
-                })
-              );
-            })()
-          : (() => {
-              world.remove(particleEntity);
-
-              gsap.ticker.remove(fn);
-            })();
+      return {
+        index,
+        dimension,
+        position: positionGet(positionNormalized, dimension, gridDimension),
+        rotation: noise * (Math.PI * 2),
+        color:
+          palette[
+            Math.min(Math.floor(noise * palette.length), palette.length - 1)
+          ]
       };
+    })
+    .filter(() => random.boolean());
+};
 
-      gsap.ticker.add(fn);
-
-      return () => gsap.ticker.remove(fn);
-    },
-    { dependencies: [] }
-  );
+const Entity = ({ entity: { dimension, position, rotation, color } }) => {
+  useExtend({ LayoutContainer, BitmapText });
 
   return (
     <pixiLayoutContainer
-      ref={ref}
       layout={{
         position: 'absolute',
-        transformOrigin: 'bottom center',
-        width: dimension,
-        height: dimension,
         borderWidth: 0,
         borderColor: color
       }}
       position={position}
+      rotation={rotation}
     >
-      <pixiGraphics
-        draw={(graphics) =>
-          graphics
-            .clear()
-            .poly([dimension * 0.5, 0, dimension, dimension, 0, dimension])
-            .stroke({ width: 1, color })
-        }
+      <pixiBitmapText
+        text='='
+        layout={{}}
+        style={{
+          fontFamily: '_Grandstander',
+          fontSize: Math.max(12, dimension * 3),
+          fontWeight: 'lighter',
+          fill: color
+        }}
       />
     </pixiLayoutContainer>
   );
 };
 
-/** @type {(dimension: number, displayDimension: object) => object} */
-const centerCoordinateGet = (dimension, displayDimension) =>
-  Object.values(displayDimension).reduce((memo, value, index) => {
-    const key = !index ? 'x' : 'y';
+const LayoutContainer_ = () => {
+  const { displayDimension } = useStore(
+    useShallow(
+      ({
+        displayDefinition: {
+          widthMaximum,
+          dimension: { width }
+        }
+      }) => ({
+        displayDimension: Math.max(widthMaximum, width)
+      })
+    )
+  );
 
-    return {
-      ...memo,
-      [key]: (value - dimension) * 0.5
-    };
-  }, {});
+  const entityCollection = useMemo(
+    () => entityCollectionGet(displayDimension),
+    [displayDimension]
+  );
 
-const randomNormalGet = random.normal();
-
-const randomNormalClampedGet = () =>
-  Math.max(0, Math.min(randomNormalGet(), 1));
-
-/** @type {(displayDimension: object) => void} */
-const particleGenerate = (displayDimension) => {
-  world.clear();
-
-  const palette = random.choice(niceColorPalettes);
-
-  Array.from({ length: 100 }).map((_, index) => {
-    const dimension = randomNormalClampedGet() * 25 + 25;
-
-    const centerCoordinate = centerCoordinateGet(dimension, displayDimension);
-
-    const age = Math.ceil(randomNormalClampedGet() * (60 * 2) + 60 * 2);
-
-    world.add({
-      key: uid(),
-      dimension,
-      position: { ...centerCoordinate },
-      velocity: (() => {
-        const rotation = randomNormalGet() * (Math.PI * 2);
-
-        const speed = randomNormalGet() * 5 + 2;
-
-        return /** @type {{ x: number; y: number }} */ (
-          ['x', 'y'].reduce((memo, key, index) => {
-            const operator = !index ? 'cos' : 'sin';
-
-            return {
-              ...memo,
-              [key]: Math[operator](rotation) * speed
-            };
-          }, {})
-        );
-      })(),
-      acceleration: { x: 0, y: 0.025 },
-      age,
-      ageInitial: age,
-      color: palette[index % palette.length]
-    });
-  });
+  return (
+    <pixiLayoutContainer
+      layout={{
+        position: 'relative',
+        width: displayDimension,
+        height: displayDimension,
+        borderWidth: 1,
+        borderColor: 0x00ff00
+      }}
+    >
+      {entityCollection.map((entity) => (
+        <Entity key={entity.index} entity={entity} />
+      ))}
+    </pixiLayoutContainer>
+  );
 };
 
 const Home = () => {
   useExtend({ LayoutContainer });
 
-  const { displayDimension } = useStore(
-    useShallow(({ displayDefinition: { dimension } }) => ({
-      displayDimension: dimension
-    }))
-  );
-
-  const particleSystem = useEntities(world.with('key'));
-
-  const particleGenerateInitializedFlagRef = useRef(false);
+  const [fontLoadedFlag, fontLoadedFlagSet] = useState(false);
 
   useEffect(() => {
-    !particleGenerateInitializedFlagRef.current &&
-      (() => {
-        particleGenerate(displayDimension);
-
-        Object.assign(particleGenerateInitializedFlagRef, { current: true });
-      })();
-  }, [displayDimension]);
-
-  useEffect(() => {
-    const unsubscribe = particleSystem.onEntityRemoved.subscribe(() =>
-      queueMicrotask(
-        () =>
-          !particleSystem.entities.length && particleGenerate(displayDimension)
+    Assets.load({
+      alias: 'Grandstander',
+      src: '/asset/font/Grandstander-VariableFont_wght.ttf',
+      data: { family: 'Grandstander' }
+    })
+      .then(() =>
+        BitmapFont.install({
+          name: '_Grandstander',
+          style: {
+            fontFamily: 'Grandstander',
+            fontSize: 32,
+            fontWeight: 'lighter',
+            fill: 0xffffff
+          },
+          chars: '='
+        })
       )
-    );
-
-    return () => unsubscribe();
-  }, [displayDimension, particleSystem]);
+      .then(() => fontLoadedFlagSet(true));
+  }, []);
 
   return (
-    <pixiLayoutContainer
-      layout={{
-        flex: 1,
-        borderWidth: 1,
-        borderColor: 0xff0000
-      }}
-    >
-      {particleSystem.entities.map((particleEntity) => (
-        <ParticleEntity
-          key={particleEntity.key}
-          particleEntity={particleEntity}
-        />
-      ))}
-    </pixiLayoutContainer>
+    fontLoadedFlag && (
+      <pixiLayoutContainer
+        layout={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          borderWidth: 1,
+          borderColor: 0xff0000
+        }}
+      >
+        <LayoutContainer_ />
+      </pixiLayoutContainer>
+    )
   );
 };
 
