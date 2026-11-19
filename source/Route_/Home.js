@@ -1,70 +1,41 @@
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
 import { useExtend } from '@pixi/react';
+import { useShallow } from 'zustand/react/shallow';
 import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
-import { DropShadowFilter } from 'pixi-filters';
+import { Graphics } from 'pixi.js';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { PixiPlugin } from 'gsap/PixiPlugin';
-import niceColorPalettes from 'nice-color-palettes';
+import Physics2DPlugin from 'gsap/Physics2DPlugin';
+import random from 'random';
 
-gsap.registerPlugin(useGSAP, PixiPlugin);
+import useStore from '#/component/useStore';
+
+gsap.registerPlugin(useGSAP, PixiPlugin, Physics2DPlugin);
 PixiPlugin.registerPIXI(pixiJs);
 
-const dimension = 100;
-
-const palette = niceColorPalettes[0];
-
-const LayoutContainer_ = () => {
-  useExtend({ LayoutContainer });
-
-  return (
-    <pixiLayoutContainer
-      layout={{
-        width: dimension,
-        height: dimension,
-        borderWidth: 4,
-        borderColor: 0xffffff,
-        borderRadius: 8,
-        backgroundColor: palette[3]
-      }}
-      filters={[
-        new DropShadowFilter({
-          offset: { x: 0, y: 5 },
-          blur: 4,
-          alpha: 0.25,
-          antialias: true
-        })
-      ]}
-    ></pixiLayoutContainer>
-  );
-};
-
-const Home = () => {
-  useExtend({ LayoutContainer });
+const ParticleEntity = ({
+  particleEntity: { index, radius, position, color }
+}) => {
+  useExtend({ LayoutContainer, Graphics });
 
   const ref = useRef(undefined);
 
   useGSAP(
     () => {
-      gsap.to(
-        /** @type {pixiJs.Container} */ (ref.current).children.find(
-          ({ children }) => children.length
-        ).children,
-        {
-          keyframes: /** @type {GSAPKeyframeVars} */ ({
-            y: [0, 80, -10, 30, 0],
-            ease: 'none',
-            easeEach: 'power2.inOut'
-          }),
-          rotation: 180 * pixiJs.DEG_TO_RAD,
-          duration: 5,
-          stagger: 0.2,
-          repeat: -1,
-          yoyo: true,
-          ease: 'elastic'
-        }
-      );
+      gsap.to(ref.current, {
+        pixi: { scale: 0.1, alpha: 0 },
+        physics2D: {
+          velocity: random.int(100, 300),
+          angle: random.int(-80, -100),
+          gravity: 100
+        },
+        duration: random.int(2, 6),
+        repeat: -1,
+        delay: index * -0.2,
+        ease: 'power1.out'
+      });
     },
     { dependencies: [] }
   );
@@ -73,17 +44,64 @@ const Home = () => {
     <pixiLayoutContainer
       ref={ref}
       layout={{
+        position: 'absolute',
+        borderWidth: 0,
+        borderColor: color
+      }}
+      position={position}
+    >
+      <pixiGraphics
+        draw={(graphics) =>
+          graphics.circle(0, 0, radius).stroke({ width: 2, color })
+        }
+        layout={{}}
+      />
+    </pixiLayoutContainer>
+  );
+};
+
+const Home = () => {
+  useExtend({ LayoutContainer });
+
+  const { displayDimension } = useStore(
+    useShallow(({ displayDefinition: { dimension } }) => ({
+      displayDimension: dimension
+    }))
+  );
+
+  const particleEntityCollection = useMemo(() => {
+    return Array.from({ length: 160 }).map((_, index, collection) => {
+      const indexNormalized = index / (collection.length - 1);
+
+      const radius = random.int(5, 40);
+
+      return {
+        index,
+        radius,
+        position: (() => {
+          const { width, height } = displayDimension;
+
+          return { x: indexNormalized * width, y: height - radius + 10 };
+        })(),
+        color: `hsl(${indexNormalized * 300}, 100%, 50%)`
+      };
+    });
+  }, [displayDimension]);
+
+  return (
+    <pixiLayoutContainer
+      layout={{
+        position: 'relative',
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 40,
         borderWidth: 1,
-        borderColor: 0xff0000,
-        backgroundColor: palette[0]
+        borderColor: 0xff0000
       }}
     >
-      {Array.from({ length: 4 }).map((_, index) => (
-        <LayoutContainer_ key={index} />
+      {particleEntityCollection.map((particleEntity) => (
+        <ParticleEntity
+          key={particleEntity.index}
+          particleEntity={particleEntity}
+        />
       ))}
     </pixiLayoutContainer>
   );
