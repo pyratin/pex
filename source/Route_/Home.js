@@ -1,169 +1,85 @@
 import { useRef, useState, useEffect } from 'react';
-import { useExtend, useApplication } from '@pixi/react';
+import { useExtend } from '@pixi/react';
+import { useShallow } from 'zustand/react/shallow';
 import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
 import { Assets, Texture, Sprite } from 'pixi.js';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { PixiPlugin } from 'gsap/PixiPlugin';
-import InertiaPlugin from 'gsap/InertiaPlugin';
-import random from 'random';
 
-gsap.registerPlugin(useGSAP, PixiPlugin, InertiaPlugin);
+gsap.registerPlugin(useGSAP, PixiPlugin);
 PixiPlugin.registerPIXI(pixiJs);
 
-const rowColumnCount = 5;
+import useStore from '#/component/useStore';
 
-const spritePadding = 5;
-
-const Sprite_ = ({ texture, pointerPositionDeltaRef }) => {
+const LayoutContainer_ = () => {
   useExtend({ LayoutContainer, Sprite });
 
-  const { contextSafe } = useGSAP();
+  const { displayDimension } = useStore(
+    useShallow(({ displayDefinition: { dimension } }) => ({
+      displayDimension: dimension
+    }))
+  );
 
   const ref = useRef(undefined);
 
-  /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
-  const onPointerMoveHandle = contextSafe(() => {
-    const refCurrentSprite = /** @type {pixiJs.Container} */ (
-      ref.current
-    ).getChildAt(0);
-
-    gsap
-      .timeline({
-        defaults: { overwrite: 'auto' }
-      })
-      .timeScale(1.2)
-      .to(refCurrentSprite, {
-        inertia: (() => {
-          const {
-            current: { x, y }
-          } = pointerPositionDeltaRef;
-
-          return Object.entries({ x, y }).reduce(
-            (memo, [key, value]) => ({
-              ...memo,
-              [key]: /** @type {gsap.InertiaObject} */ ({
-                velocity: value * 30,
-                end: 0
-              })
-            }),
-            {}
-          );
-        })()
-      })
-      .fromTo(
-        refCurrentSprite,
-        { pixi: { angle: 0 } },
-        {
-          pixi: { angle: random.int(-15, 15) },
-          duration: 0.4,
-          repeat: 1,
-          yoyo: true,
-          ease: 'power1.inOut'
-        },
-        '<'
-      );
-  });
-
-  return (
-    <pixiLayoutContainer
-      ref={ref}
-      layout={{
-        padding: spritePadding,
-        borderWidth: 0,
-        borderColor: 0x0000ff
-      }}
-      eventMode='static'
-      cursor='pointer'
-      onPointerMove={onPointerMoveHandle}
-    >
-      <pixiSprite texture={texture} layout={{}} />
-    </pixiLayoutContainer>
-  );
-};
-
-const layoutContainerDimensionGet = ({ width, height }) =>
-  Object.entries({ width, height }).reduce(
-    (memo, [key, value]) => ({
-      ...memo,
-      [key]: (value + spritePadding * 2) * rowColumnCount
-    }),
-    {}
-  );
-
-const pointerPositionInitial = { x: 0, y: 0 };
-
-const LayoutContainer_ = () => {
-  useExtend({ LayoutContainer });
-
-  const {
-    app: { stage, screen }
-  } = useApplication();
-
-  const pointerPositionRef = useRef(pointerPositionInitial);
-
-  const pointerPositionDeltaRef = useRef(pointerPositionInitial);
+  const gsapQuickToFunctionCollectionRef = useRef(undefined);
 
   const [texture, textureSet] = useState(Texture.EMPTY);
 
   useEffect(() => {
-    Assets.load('/asset/image/bunny.png').then(textureSet);
+    Object.assign(gsapQuickToFunctionCollectionRef, {
+      current: ['x', 'y'].map((key) =>
+        gsap.quickTo(ref.current, key, { duration: 0.6, ease: 'power3' })
+      )
+    });
   }, []);
 
   useEffect(() => {
-    Object.assign(
-      stage,
-      /** @type {pixiJs.ContainerOptions} */ ({
-        eventMode: 'static',
-        hitArea: screen
-      })
+    Assets.load('/asset/image/bunny.png').then((texture) => {
+      Object.assign(
+        texture.source,
+        /** @type {pixiJs.TextureSourceOptions} */ ({
+          scaleMode: 'nearest',
+          resolution: 1 / 5
+        })
+      );
+
+      /** @type {pixiJs.Texture} */ (texture).update();
+
+      textureSet(texture);
+    });
+  }, []);
+
+  /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
+  const onGlobalPointerMoveHandle = ({ client: { x, y } }) => {
+    [x, y].map((value, index) =>
+      gsapQuickToFunctionCollectionRef.current[index](value)
     );
-
-    /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
-    const onPointerMoveHandle = ({ client }) => {
-      Object.assign(pointerPositionDeltaRef, {
-        current: /** @type {typeof pointerPositionInitial} */ (
-          (() => {
-            const { x, y } = client;
-
-            const {
-              current: { x: _x, y: _y }
-            } = pointerPositionRef;
-
-            return { x: x - _x, y: y - _y };
-          })()
-        )
-      });
-
-      Object.assign(pointerPositionRef, {
-        current: /** @type {typeof pointerPositionInitial} */ ({ ...client })
-      });
-    };
-
-    stage.on('pointermove', onPointerMoveHandle);
-
-    return () => {
-      stage.off('pointermove', onPointerMoveHandle);
-    };
-  }, [stage, screen]);
+  };
 
   return (
     <pixiLayoutContainer
-      layout={{
-        ...layoutContainerDimensionGet(texture),
-        flexWrap: 'wrap',
-        borderWidth: 0,
-        borderColor: 0x00ff00
-      }}
+      ref={ref}
+      position={(() => {
+        const { width, height } = displayDimension;
+
+        return /** @type {{ x: number; y: number }} */ (
+          Object.entries({ x: width, y: height }).reduce(
+            (memo, [key, value]) => ({
+              ...memo,
+              [key]: value * 0.5
+            }),
+            {}
+          )
+        );
+      })()}
+      eventMode='static'
+      cursor='pointer'
+      onGlobalPointerMove={onGlobalPointerMoveHandle}
     >
-      {Array.from({ length: rowColumnCount ** 2 }).map((_, index) => (
-        <Sprite_
-          key={index}
-          texture={texture}
-          pointerPositionDeltaRef={pointerPositionDeltaRef}
-        />
-      ))}
+      <pixiSprite anchor={0.5} texture={texture} />
     </pixiLayoutContainer>
   );
 };
@@ -175,8 +91,6 @@ const Home = () => {
     <pixiLayoutContainer
       layout={{
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
         borderWidth: 1,
         borderColor: 0xff0000
       }}
