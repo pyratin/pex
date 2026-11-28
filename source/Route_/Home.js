@@ -1,20 +1,16 @@
-import { useRef, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useExtend } from '@pixi/react';
 import { useShallow } from 'zustand/react/shallow';
 import { LayoutContainer } from '@pixi/layout/components';
 import * as pixiJs from 'pixi.js';
-import { Assets, Texture, Container, AnimatedSprite, Graphics } from 'pixi.js';
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import { PixiPlugin } from 'gsap/PixiPlugin';
-
-gsap.registerPlugin(useGSAP, PixiPlugin);
-PixiPlugin.registerPIXI(pixiJs);
+import { Assets, Texture, Container, Sprite, Graphics } from 'pixi.js';
 
 import useStore from '#/component/useStore';
 
-const AnimatedSprite_ = () => {
-  useExtend({ Container, AnimatedSprite, Graphics });
+const assetAliasCollection = ['flowerTop', 'eggHead'];
+
+const Sprite_ = () => {
+  useExtend({ Container, Sprite, Graphics });
 
   const { displayDimension } = useStore(
     useShallow(({ displayDefinition: { dimension } }) => ({
@@ -22,38 +18,31 @@ const AnimatedSprite_ = () => {
     }))
   );
 
-  const ref = useRef(undefined);
+  const [assetAliasIndex, assetAliasIndexSet] = useState(0);
 
-  const [textureCollection, textureCollectionSet] = useState([Texture.EMPTY]);
+  const [texture, textureSet] = useState(Texture.EMPTY);
 
   useEffect(() => {
-    Assets.load('/asset/sprite/fighter.json').then(({ textures }) =>
-      textureCollectionSet(Object.values(textures))
+    Assets.add(
+      assetAliasCollection.map((alias) => ({
+        alias,
+        src: `/asset/image/${alias}.png`
+      }))
     );
+
+    Assets.backgroundLoad(assetAliasCollection);
   }, []);
 
   useEffect(() => {
-    textureCollection[0] !== Texture.EMPTY &&
-      /** @type {pixiJs.AnimatedSprite} */ (
-        /** @type {pixiJs.Container} */ (ref.current).getChildAt(0)
-      ).play();
-  }, [textureCollection]);
+    Assets.load(assetAliasCollection[assetAliasIndex]).then(textureSet);
+  }, [assetAliasIndex]);
 
-  useGSAP(
-    () => {
-      gsap.to(ref.current, {
-        pixi: { angle: 360 },
-        duration: 5,
-        ease: 'none',
-        repeat: -1
-      });
-    },
-    { dependencies: [] }
-  );
+  /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
+  const onPointerTapHandle = () =>
+    assetAliasIndexSet((assetAliasIndex) => Number(!assetAliasIndex));
 
   return (
     <pixiContainer
-      ref={ref}
       position={(() => {
         const { width, height } = displayDimension;
 
@@ -67,12 +56,11 @@ const AnimatedSprite_ = () => {
           )
         );
       })()}
+      eventMode='static'
+      cursor='pointer'
+      onPointerTap={onPointerTapHandle}
     >
-      <pixiAnimatedSprite
-        textures={textureCollection}
-        anchor={0.5}
-        animationSpeed={0.5}
-      />
+      <pixiSprite texture={texture} anchor={0.5} />
 
       <pixiGraphics
         draw={(graphics) =>
@@ -80,9 +68,7 @@ const AnimatedSprite_ = () => {
             .clear()
             .rect(
               ...(() => {
-                const [{ width, height }] = /** @type {pixiJs.Texture[]} */ (
-                  textureCollection
-                );
+                const { width, height } = texture;
 
                 const padding = 20;
 
@@ -94,7 +80,7 @@ const AnimatedSprite_ = () => {
                 ]);
               })()
             )
-            .stroke({ width: 1, color: 0xffffff, alpha: 0.25 })
+            .stroke({ width: 1, color: 0xffffff })
         }
       />
     </pixiContainer>
@@ -112,7 +98,7 @@ const Home = () => {
         borderColor: 0xff0000
       }}
     >
-      <AnimatedSprite_ />
+      <Sprite_ />
     </pixiLayoutContainer>
   );
 };
