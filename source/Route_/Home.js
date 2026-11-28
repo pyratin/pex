@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { useExtend } from '@pixi/react';
 import { useShallow } from 'zustand/react/shallow';
 import { LayoutContainer } from '@pixi/layout/components';
-import * as pixiJs from 'pixi.js';
-import { Assets, Texture, Container, Sprite, Graphics } from 'pixi.js';
+import { Assets, Texture, Sprite, Graphics, Container } from 'pixi.js';
 
 import useStore from '#/component/useStore';
 
-const assetAliasCollection = ['flowerTop', 'eggHead'];
+/** @type {[string, string[]][]} */
+const bundleDefinitionCollection = [
+  ['start-screen', ['flowerTop']],
+  ['game-screen', ['eggHead']]
+];
 
 const Sprite_ = () => {
   useExtend({ Container, Sprite, Graphics });
@@ -18,28 +21,46 @@ const Sprite_ = () => {
     }))
   );
 
-  const [assetAliasIndex, assetAliasIndexSet] = useState(0);
+  const [bundleDefinitionIndex, bundleDefinitionIndexSet] = useState(0);
 
   const [texture, textureSet] = useState(Texture.EMPTY);
 
   useEffect(() => {
-    Assets.add(
-      assetAliasCollection.map((alias) => ({
-        alias,
-        src: `/asset/image/${alias}.png`
-      }))
-    );
+    Assets.init({
+      manifest: {
+        bundles: bundleDefinitionCollection.map(
+          ([name, assetAliasCollection]) => ({
+            name,
+            assets: assetAliasCollection.map((alias) => ({
+              alias,
+              src: `/asset/image/${alias}.png`
+            }))
+          })
+        )
+      }
+    });
 
-    Assets.backgroundLoad(assetAliasCollection);
+    Assets.backgroundLoadBundle(
+      bundleDefinitionCollection.map(([name]) => name)
+    );
   }, []);
 
   useEffect(() => {
-    Assets.load(assetAliasCollection[assetAliasIndex]).then(textureSet);
-  }, [assetAliasIndex]);
+    const [name, assetAliasCollection] =
+      bundleDefinitionCollection[bundleDefinitionIndex];
 
-  /** @type {(event: pixiJs.FederatedPointerEvent) => void} */
-  const onPointerTapHandle = () =>
-    assetAliasIndexSet((assetAliasIndex) => Number(!assetAliasIndex));
+    Assets.loadBundle(name)
+      .then((bundleObject) =>
+        assetAliasCollection.map((alias) => bundleObject[alias])
+      )
+      .then(([texture]) => textureSet(texture));
+  }, [bundleDefinitionIndex]);
+
+  const onPointerTapHandle = () => {
+    bundleDefinitionIndexSet((bundleDefinitionIndex) =>
+      Number(!bundleDefinitionIndex)
+    );
+  };
 
   return (
     <pixiContainer
